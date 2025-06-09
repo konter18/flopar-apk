@@ -9,4 +9,4 @@ export const ROUTES = {
 
   // Otras
   NOT_FOUND: "/404",
-};
+}as const;
