@@ -1,19 +1,26 @@
-import React, { useState, useLayoutEffect  } from "react";
-import { View, Text, TextInput, Button, StyleSheet, Alert } from "react-native";
-import { useNavigation } from '@react-navigation/native';
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  Button,
+  StyleSheet,
+  Alert,
+} from "react-native";
 import { useRouter } from "expo-router";
+import { saveUserSession } from "../utils/session";
 import { ENDPOINTS } from "../constants/endpoints";
 import { ROUTES } from "../constants/routes";
+
+export const navigationOptions = {
+  headerShown: false,
+};
+
 
 export default function LoginScreen() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const navigation = useNavigation();
-
-  useLayoutEffect(() => {
-    navigation.setOptions({ title: "Control flopar" });
-  }, [navigation]);
 
   const handleLogin = async () => {
     try {
@@ -22,9 +29,7 @@ export default function LoginScreen() {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: `username=${encodeURIComponent(
-          username
-        )}&password=${encodeURIComponent(password)}`,
+        body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
       });
 
       if (!response.ok) {
@@ -32,8 +37,7 @@ export default function LoginScreen() {
       }
 
       const data = await response.json();
-      console.log("Token recibido:", data.access_token);
-      // Aquí podrías guardar el token con AsyncStorage si quieres mantener la sesión
+      await saveUserSession(data);
 
       router.push(ROUTES.HOME);
     } catch (error: any) {
