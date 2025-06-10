@@ -4,8 +4,8 @@ export const ROUTES = {
   
   // Privadas
   HOME: "/Home",
-  USERS: "/users",
-  PRODUCTS: "/products",
+  SCAN: "/Scan",
+  GRILLA: "/Grilla",
 
   // Otras
   NOT_FOUND: "/404",
