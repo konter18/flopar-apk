@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
-export default function ScanScreen() {
+export default function GrillaScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.text}>Hola, esto es para escanear.</Text>

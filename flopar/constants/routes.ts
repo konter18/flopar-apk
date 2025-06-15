@@ -4,8 +4,9 @@ export const ROUTES = {
   
   // Privadas
   HOME: "/Home",
-  SCAN: "/Scan",
-  GRILLA: "/Grilla",
+  BODEGA: "/Bodega",
+  PIONETA: "/Pioneta",
+  ADMINISTRATIVO: "/Administrativo",
 
   // Otras
   NOT_FOUND: "/404",
