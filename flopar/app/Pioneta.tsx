@@ -68,7 +68,7 @@ export default function ScanScreen() {
       {loading ? (
         <ActivityIndicator size="large" color="#2196F3" />
       ) : products.length === 0 ? (
-        <Text style={styles.text}>No hay productos para hoy.</Text>
+        <Text style={styles.text}>No hay productos para hoy..</Text>
       ) : (
         <FlatList
           data={products}
