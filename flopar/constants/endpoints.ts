@@ -1,4 +1,4 @@
-const BASE_URL = "http://192.168.1.80:8000";//cambiar segun el pc
+const BASE_URL = "http://192.168.1.85:8000";//cambiar segun el pc
 
 export const ENDPOINTS = {
   GET_TOKEN: `${BASE_URL}/token`,
