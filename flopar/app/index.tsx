@@ -23,27 +23,43 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
 
   const handleLogin = async () => {
-    try {
-      const response = await fetch(ENDPOINTS.GET_TOKEN, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
-      });
+  try {
+    const response = await fetch(ENDPOINTS.GET_TOKEN, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+    });
 
-      if (!response.ok) {
-        throw new Error("Credenciales incorrectas");
-      }
-
-      const data = await response.json();
-      await saveUserSession(data);
-
-      router.push(ROUTES.HOME);
-    } catch (error: any) {
-      Alert.alert("Error al iniciar sesión", error.message);
+    if (!response.ok) {
+      throw new Error("Credenciales incorrectas");
     }
-  };
+
+    const data = await response.json();
+    await saveUserSession(data);
+
+    // Redirección basada en el rol
+    switch (data.role) {
+      case 'admin':
+        router.replace(ROUTES.ADMINISTRATIVO);
+        break;
+      case 'bodega':
+        router.replace(ROUTES.BODEGA);
+        break;
+      case 'pioneta':
+        router.replace(ROUTES.PIONETA);
+        break;
+      default:
+        // Si no reconoce el rol, puede ir a Home o mostrar alerta
+        router.replace(ROUTES.HOME);
+        break;
+    }
+
+  } catch (error: any) {
+    Alert.alert("Error al iniciar sesión", error.message);
+  }
+};
 
   return (
     <View style={styles.container}>
