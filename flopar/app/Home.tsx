@@ -16,6 +16,21 @@ export default function HomeScreen() {
         if (jsonValue) {
           const user = JSON.parse(jsonValue);
           setFirstName(user.first_name || '');
+
+          // Redirigir según el rol
+          switch (user.role) {
+            case 'admin':
+              router.replace(ROUTES.ADMINISTRATIVO);
+              break;
+            case 'bodega':
+              router.replace(ROUTES.BODEGA);
+              break;
+            case 'pioneta':
+              router.replace(ROUTES.PIONETA);
+              break;
+            default:
+              console.warn('Rol no reconocido:', user.role);
+          }
         }
       } catch (error) {
         console.error('Error al obtener el usuario:', error);
@@ -25,23 +40,16 @@ export default function HomeScreen() {
     loadUser();
   }, []);
 
-  const handleScan = () => {
-    router.push(ROUTES.SCAN)
-  };
-
-  const handleGridCheck = () => {
-    router.push(ROUTES.GRILLA)
-  };
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>
         {firstName ? `¡Bienvenido, ${firstName}!` : '¡Bienvenido!'}
       </Text>
-      <TouchableOpacity style={styles.customButton} onPress={handleScan}>
+      {/* Botones opcionales si no haces redirección automática */}
+      <TouchableOpacity style={styles.customButton} onPress={() => router.push(ROUTES.BODEGA)}>
         <Text style={styles.buttonText}>Escanear</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.customButton} onPress={handleGridCheck}>
+      <TouchableOpacity style={styles.customButton} onPress={() => router.push(ROUTES.PIONETA)}>
         <Text style={styles.buttonText}>Revisar Grilla</Text>
       </TouchableOpacity>
     </View>
