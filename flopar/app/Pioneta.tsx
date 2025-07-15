@@ -57,7 +57,7 @@ export default function ScanScreen() {
         // Obtener productos filtrados por batch y patente
         const { data: productos } = await axios.get(ENDPOINTS.GET_PRODUCT, {
           params: {
-            product_batch_id: batchId,
+            batch_id: batchId,
             patent: userPatente,
           },
         });

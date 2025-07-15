@@ -10,6 +10,9 @@ export const ENDPOINTS = {
   // Productos
   GET_PRODUCT: `${BASE_URL}/product/`,
   POST_PRODUCT: `${BASE_URL}/product/`,
+  GET_PRODUCTS_FILTERED: (searchTerm: string, batchId: number | string) =>
+    `${BASE_URL}/product/search-product/?query=${encodeURIComponent(searchTerm)}&batch_id=${batchId}`,
+  PATCH_PRODUCT: (id: number | string) => `${BASE_URL}/product/${id}`,
 
   // Usuarios
   GET_USER: `${BASE_URL}/users/`,

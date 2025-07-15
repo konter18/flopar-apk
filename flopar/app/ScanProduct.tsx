@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, Button, Alert, ActivityIndicator, StyleSheet } from "react-native";
-import { Camera, CameraType, CameraView } from "expo-camera";
+import {
+  View,
+  Text,
+  Button,
+  Alert,
+  ActivityIndicator,
+  StyleSheet,
+} from "react-native";
+import { Camera, CameraView } from "expo-camera";
 import { useRouter } from "expo-router";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -24,19 +31,51 @@ export default function ScanProductScreen() {
     if (scanned) return;
     setScanned(true);
     setLoading(true);
+
     try {
-      const code = barcode.data || barcode.rawValue;
-      // ... lógica de producto
-      Alert.alert("Código escaneado", `Código: ${code}`);
-    } catch (err) {
-      Alert.alert("Error", "No se pudo verificar el producto");
+      const code = (barcode.data || barcode.rawValue).trim();
+
+      // --- LÓGICA PRINCIPAL: Buscar y verificar producto ---
+      const batchRes = await axios.get(ENDPOINTS.LAST_BATCH);
+      const batchId = batchRes.data?.id || batchRes.data || batchRes;
+
+      // CONSULTA REAL: Ejecuta el axios.get
+      const searchUrl = ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId);
+      const res = await axios.get(searchUrl);
+
+      if (!res.data || res.data.length === 0) {
+        Alert.alert(
+          "Producto no encontrado",
+          `No existe producto con código: ${code} \nbatch_id: ${batchId}`
+        );
+        setLoading(false);
+        return;
+      }
+
+      const product = res.data[0];
+      await axios.patch(ENDPOINTS.PATCH_PRODUCT(product.id), {
+        status: "Verificado",
+      });
+
+      Alert.alert(
+        "¡Producto verificado!",
+        `Producto: ${product.name}\nCódigo: ${product.code}`
+      );
+    } catch (err: any) {
+      Alert.alert(
+        "Error",
+        err?.response?.data?.detail || "No se pudo verificar el producto"
+      );
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  if (hasPermission === null) return <Text>Solicitando permiso de cámara...</Text>;
-  if (hasPermission === false) return <Text>No se tiene acceso a la cámara</Text>;
+  if (hasPermission === null)
+    return <Text>Solicitando permiso de cámara...</Text>;
+  if (hasPermission === false)
+    return <Text>No se tiene acceso a la cámara</Text>;
 
   return (
     <View style={{ flex: 1 }}>
@@ -46,7 +85,15 @@ export default function ScanProductScreen() {
         facing="back"
         barcodeScannerSettings={{
           barcodeTypes: [
-            "ean13", "ean8", "code128", "code39", "code93", "upc_a", "upc_e", "qr", "pdf417"
+            "ean13",
+            "ean8",
+            "code128",
+            "code39",
+            "code93",
+            "upc_a",
+            "upc_e",
+            "qr",
+            "pdf417",
           ],
         }}
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
@@ -57,7 +104,10 @@ export default function ScanProductScreen() {
         </View>
       )}
       {scanned && !loading && (
-        <Button title="Escanear otro código" onPress={() => setScanned(false)} />
+        <Button
+          title="Escanear otro código"
+          onPress={() => setScanned(false)}
+        />
       )}
     </View>
   );
