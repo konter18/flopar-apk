@@ -77,7 +77,7 @@ export default function ScanScreen() {
   return (
     <View style={{ flex: 1 }}>
       {/* HEADER */}
-      <CustomHeader title="Pioneta`" onAvatarPress={() => setShowMenu(true)} />
+      <CustomHeader title="Pioneta" onAvatarPress={() => setShowMenu(true)} />
       {/* MENU DESPLEGABLE */}
       {showMenu && (
         <TouchableOpacity
@@ -99,6 +99,13 @@ export default function ScanScreen() {
             ? `Trabajando con patente: ${patente}`
             : "Cargando patente..."}
         </Text>
+        <TouchableOpacity
+          style={styles.scanButton}
+          onPress={() => {router.push("/ScanProduct")
+          }}
+        >
+          <Text style={styles.scanButtonText}>Escanear producto</Text>
+        </TouchableOpacity>
 
         {loading ? (
           <ActivityIndicator size="large" color="#2196F3" />
@@ -178,4 +185,17 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     color: "#333",
   },
+  scanButton: {
+  backgroundColor: "#2196F3",
+  paddingVertical: 14,
+  borderRadius: 10,
+  alignItems: "center",
+  marginBottom: 20,
+  marginHorizontal: 10,
+},
+scanButtonText: {
+  color: "#fff",
+  fontWeight: "bold",
+  fontSize: 18,
+},
 });
