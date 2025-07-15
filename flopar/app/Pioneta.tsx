@@ -21,6 +21,7 @@ interface Product {
   name: string;
   code: string;
   patent: string;
+  status: string;
 }
 
 export default function ScanScreen() {
@@ -101,7 +102,8 @@ export default function ScanScreen() {
         </Text>
         <TouchableOpacity
           style={styles.scanButton}
-          onPress={() => {router.push("/ScanProduct")
+          onPress={() => {
+            router.push("/ScanProduct");
           }}
         >
           <Text style={styles.scanButtonText}>Escanear producto</Text>
@@ -121,6 +123,16 @@ export default function ScanScreen() {
                 <Text style={styles.productName}>Nombre: {item.name}</Text>
                 <Text>Código: {item.code}</Text>
                 <Text>Patente: {item.patent}</Text>
+                <Text>
+                  Estado:{" "}
+                  <Text
+                    style={{
+                      color: item.status === "Verificado" ? "green" : "red",
+                    }}
+                  >
+                    {item.status}
+                  </Text>
+                </Text>
               </View>
             )}
           />
@@ -186,16 +198,16 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   scanButton: {
-  backgroundColor: "#2196F3",
-  paddingVertical: 14,
-  borderRadius: 10,
-  alignItems: "center",
-  marginBottom: 20,
-  marginHorizontal: 10,
-},
-scanButtonText: {
-  color: "#fff",
-  fontWeight: "bold",
-  fontSize: 18,
-},
+    backgroundColor: "#2196F3",
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginBottom: 20,
+    marginHorizontal: 10,
+  },
+  scanButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 18,
+  },
 });
