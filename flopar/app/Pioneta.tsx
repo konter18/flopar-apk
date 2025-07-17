@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -8,15 +8,15 @@ import {
   Alert,
   TouchableOpacity,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { ENDPOINTS } from "../constants/endpoints";
 import CustomHeader from "./components/CustomHeader";
 import { ROUTES } from "../constants/routes";
 import { MaterialIcons } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native";
 
+// --- Aquí va tu interface Product ---
 interface Product {
   id: number;
   name: string;
@@ -25,63 +25,72 @@ interface Product {
   status: string;
 }
 
+// --- Tipamos props de ProductCard ---
+type ProductCardProps = {
+  item: Product;
+};
+
+const ProductCard = React.memo(({ item }: ProductCardProps) => (
+  <View style={styles.card}>
+    <Text style={styles.productName}>Nombre: {item.name}</Text>
+    <Text>Código: {item.code}</Text>
+    <Text>Patente: {item.patent}</Text>
+    <Text>
+      Estado:{" "}
+      <Text style={{ color: item.status === "Verificado" ? "green" : "red" }}>
+        {item.status}
+      </Text>
+    </Text>
+  </View>
+));
+
 export default function ScanScreen() {
+  // -------- Aquí tipa el state ---------
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [patente, setPatente] = useState<string | null>(null);
-  // Router para navegación
-  const router = useRouter();
-  // Estado para mostrar/ocultar menú de cerrar sesión
   const [showMenu, setShowMenu] = useState(false);
+  const router = useRouter();
+
+  const fetchProductos = useCallback(async () => {
+    try {
+      setLoading(true);
+      const userDataString = await AsyncStorage.getItem("userData");
+      if (!userDataString) throw new Error("No hay usuario autenticado");
+      const userData = JSON.parse(userDataString);
+      const userPatente = userData.patent;
+      setPatente(userPatente);
+      const { data: batchId } = await axios.get(ENDPOINTS.LAST_BATCH);
+      const { data: productos } = await axios.get(ENDPOINTS.GET_PRODUCT, {
+        params: {
+          batch_id: batchId,
+          patent: userPatente,
+        },
+      });
+      setProducts(productos);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "No se pudieron cargar los productos.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchProductos();
+    }, [fetchProductos])
+  );
 
   const handleLogout = async () => {
-    setShowMenu(false); // Cierra menú
+    setShowMenu(false);
     await AsyncStorage.clear();
     router.replace(ROUTES.LOGIN);
   };
 
-  useEffect(() => {
-    const fetchProductos = async () => {
-      try {
-        setLoading(true);
-
-        // Obtener usuario desde AsyncStorage
-        const userDataString = await AsyncStorage.getItem("userData");
-        if (!userDataString) throw new Error("No hay usuario autenticado");
-
-        const userData = JSON.parse(userDataString);
-        const userPatente = userData.patent;
-        setPatente(userPatente);
-
-        // Obtener batch ID
-        const { data: batchId } = await axios.get(ENDPOINTS.LAST_BATCH);
-
-        // Obtener productos filtrados por batch y patente
-        const { data: productos } = await axios.get(ENDPOINTS.GET_PRODUCT, {
-          params: {
-            batch_id: batchId,
-            patent: userPatente,
-          },
-        });
-
-        setProducts(productos);
-      } catch (error) {
-        console.error(error);
-        Alert.alert("Error", "No se pudieron cargar los productos.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProductos();
-  }, []);
-
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
-      {/* HEADER */}
       <CustomHeader title="Pioneta" onAvatarPress={() => setShowMenu(true)} />
-      
-      {/* MENU DESPLEGABLE */}
       {showMenu && (
         <TouchableOpacity
           style={styles.menuOverlay}
@@ -110,7 +119,6 @@ export default function ScanScreen() {
         >
           <Text style={styles.scanButtonText}>Escanear producto</Text>
         </TouchableOpacity>
-
         {loading ? (
           <ActivityIndicator size="large" color="#2196F3" />
         ) : products.length === 0 ? (
@@ -119,24 +127,11 @@ export default function ScanScreen() {
           <FlatList
             data={products}
             keyExtractor={(item) => item.id.toString()}
-            contentContainerStyle={{ paddingTop: 10 }}
-            renderItem={({ item }) => (
-              <View style={styles.card}>
-                <Text style={styles.productName}>Nombre: {item.name}</Text>
-                <Text>Código: {item.code}</Text>
-                <Text>Patente: {item.patent}</Text>
-                <Text>
-                  Estado:{" "}
-                  <Text
-                    style={{
-                      color: item.status === "Verificado" ? "green" : "red",
-                    }}
-                  >
-                    {item.status}
-                  </Text>
-                </Text>
-              </View>
-            )}
+            contentContainerStyle={{ paddingTop: 10, paddingBottom: 30 }}
+            renderItem={({ item }) => <ProductCard item={item} />}
+            initialNumToRender={10}
+            windowSize={7}
+            removeClippedSubviews={true}
           />
         )}
       </View>
@@ -176,7 +171,7 @@ const styles = StyleSheet.create({
   },
   dropdownMenu: {
     position: "absolute",
-    top: 55, // debajo del header
+    top: 55,
     right: 16,
     backgroundColor: "#fff",
     borderRadius: 8,
