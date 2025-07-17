@@ -15,6 +15,7 @@ import { ENDPOINTS } from "../constants/endpoints";
 import CustomHeader from "./components/CustomHeader";
 import { ROUTES } from "../constants/routes";
 import { MaterialIcons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native";
 
 interface Product {
   id: number;
@@ -76,9 +77,10 @@ export default function ScanScreen() {
   }, []);
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: "#fff" }}>
       {/* HEADER */}
       <CustomHeader title="Pioneta" onAvatarPress={() => setShowMenu(true)} />
+      
       {/* MENU DESPLEGABLE */}
       {showMenu && (
         <TouchableOpacity

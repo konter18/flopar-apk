@@ -6,12 +6,14 @@ import {
   Alert,
   ActivityIndicator,
   StyleSheet,
+  TouchableOpacity,
 } from "react-native";
 import { Camera, CameraView } from "expo-camera";
 import { useRouter } from "expo-router";
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ENDPOINTS } from "../constants/endpoints";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function ScanProductScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
@@ -19,6 +21,7 @@ export default function ScanProductScreen() {
   const [loading, setLoading] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     (async () => {
@@ -34,54 +37,41 @@ export default function ScanProductScreen() {
 
     try {
       const code = (barcode.data || barcode.rawValue).trim();
-
-      // Obtener datos de usuario
       const userDataString = await AsyncStorage.getItem("userData");
       if (!userDataString) throw new Error("No hay usuario autenticado");
       const userData = JSON.parse(userDataString);
       const userId = userData.user_id;
-
-      // Obtener fecha/hora actual en formato ISO
       const now = new Date().toISOString();
-
-      // Obtener el batch_id
       const batchRes = await axios.get(ENDPOINTS.LAST_BATCH);
       const batchId = batchRes.data?.id || batchRes.data || batchRes;
-
-      // Buscar el producto
       const searchUrl = ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId);
       const res = await axios.get(searchUrl);
 
       if (!res.data || res.data.length === 0) {
         Alert.alert(
           "Producto no encontrado",
-          `No existe producto con código: ${code} \nbatch_id: ${batchId}`
+          `No existe producto con código: ${code}`
         );
         setLoading(false);
         return;
       }
 
       const product = res.data[0];
-
-      // --- DEPURACIÓN: Muestra el objeto que vas a enviar ---
       const patchPayload = {
         status: "Verificado",
         verified_by: userId,
         verified_at: now,
       };
 
-      // --- AQUÍ SE ENVÍA EL PATCH ---
       await axios.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
 
       Alert.alert(
         "¡Producto verificado!",
         `Producto: ${product.name}\nCódigo: ${product.code}`
-      )
-      //temporizador para volver a la pantalla anterior
+      );
       setTimeout(() => {
         router.back();
       }, 1500);
-
     } catch (err: any) {
       Alert.alert(
         "Error",
@@ -124,11 +114,22 @@ export default function ScanProductScreen() {
           <ActivityIndicator size="large" color="#2196F3" />
         </View>
       )}
+      {/* Botón flotante, transparente, respetando safe area */}
       {scanned && !loading && (
-        <Button
-          title="Escanear otro código"
-          onPress={() => setScanned(false)}
-        />
+        <View
+          style={[
+            styles.buttonContainer,
+            { paddingBottom: insets.bottom + 20 }, // un poco más de margen
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.fab}
+            onPress={() => setScanned(false)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.fabText}>ESCANEAR OTRO CÓDIGO</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -141,5 +142,34 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: "center",
+  },
+  buttonContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "transparent", // Fondo transparente
+    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+  fab: {
+    backgroundColor: "#2196F3",
+    borderRadius: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 30,
+    marginBottom: 0,
+    alignItems: "center",
+    minWidth: "90%",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  fabText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 18,
+    textAlign: "center",
   },
 });
