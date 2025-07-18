@@ -13,6 +13,9 @@ export const ENDPOINTS = {
   GET_PRODUCTS_FILTERED: (searchTerm: string, batchId: number | string) =>
     `${BASE_URL}/product/search-product/?query=${encodeURIComponent(searchTerm)}&batch_id=${batchId}`,
   PATCH_PRODUCT: (id: number | string) => `${BASE_URL}/product/${id}`,
+  CONFIRM_QUADRATURE: (patente: string) => `${BASE_URL}/product/patente/${encodeURIComponent(patente)}/confirm-quadrature`,
+
+
 
   // Usuarios
   GET_USER: `${BASE_URL}/users/`,

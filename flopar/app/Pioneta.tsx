@@ -16,7 +16,6 @@ import CustomHeader from "./components/CustomHeader";
 import { ROUTES } from "../constants/routes";
 import { MaterialIcons } from "@expo/vector-icons";
 
-// --- Aquí va tu interface Product ---
 interface Product {
   id: number;
   name: string;
@@ -25,7 +24,6 @@ interface Product {
   status: string;
 }
 
-// --- Tipamos props de ProductCard ---
 type ProductCardProps = {
   item: Product;
 };
@@ -45,7 +43,6 @@ const ProductCard = React.memo(({ item }: ProductCardProps) => (
 ));
 
 export default function ScanScreen() {
-  // -------- Aquí tipa el state ---------
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [patente, setPatente] = useState<string | null>(null);
@@ -88,6 +85,43 @@ export default function ScanScreen() {
     router.replace(ROUTES.LOGIN);
   };
 
+  // ---- Nuevo handler que asegura patente de usuario autenticado ----
+  const handleConfirmQuadrature = async () => {
+    try {
+      const userDataString = await AsyncStorage.getItem("userData");
+      if (!userDataString) throw new Error("No hay usuario autenticado");
+      const userData = JSON.parse(userDataString);
+      const userPatente = userData.patent;
+
+      await axios.post(ENDPOINTS.CONFIRM_QUADRATURE(userPatente));
+      Alert.alert(
+        "¡Cuadratura confirmada!",
+        "Todos los productos están verificados. Puedes salir de bodega."
+      );
+    } catch (err: any) {
+      // Comienza chequeando si tienes productos pendientes en el detail
+      const detail = err?.response?.data?.detail;
+      let mensaje = "Aún tienes productos pendientes por verificar.";
+
+      // Si detail es un objeto y tiene pending_products (la versión más útil)
+      if (
+        detail &&
+        typeof detail === "object" &&
+        Array.isArray(detail.pending_products)
+      ) {
+        const pendientes = detail.pending_products
+          .map((prod: any) => `${prod.code} (${prod.name})`)
+          .join(", ");
+        mensaje = `Productos pendientes de verificación:\n${pendientes}`;
+      }
+      // Si detail es un string que contiene los códigos (como en la versión solo arreglo)
+      else if (typeof detail === "string" && detail.includes("verificación")) {
+        mensaje = detail;
+      }
+      Alert.alert("No puedes confirmar aún", mensaje);
+    }
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
       <CustomHeader title="Pioneta" onAvatarPress={() => setShowMenu(true)} />
@@ -111,14 +145,26 @@ export default function ScanScreen() {
             ? `Trabajando con patente: ${patente}`
             : "Cargando patente..."}
         </Text>
-        <TouchableOpacity
-          style={styles.scanButton}
-          onPress={() => {
-            router.push("/ScanProduct");
-          }}
-        >
-          <Text style={styles.scanButtonText}>Escanear producto</Text>
-        </TouchableOpacity>
+
+        {/* Botones en fila, ahora ambos son del mismo alto y estilo */}
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={styles.scanButton}
+            onPress={() => {
+              router.push("/ScanProduct");
+            }}
+          >
+            <Text style={styles.scanButtonText}>Escanear producto</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.confirmButton}
+            onPress={handleConfirmQuadrature}
+          >
+            <MaterialIcons name="check" size={26} color="#fff" />
+            <Text style={styles.confirmButtonText}>Confirmar</Text>
+          </TouchableOpacity>
+        </View>
+
         {loading ? (
           <ActivityIndicator size="large" color="#2196F3" />
         ) : products.length === 0 ? (
@@ -142,7 +188,7 @@ export default function ScanScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+    padding: 15,
   },
   text: {
     fontSize: 18,
@@ -194,17 +240,43 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     color: "#333",
   },
+  buttonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+    gap: 10,
+  },
   scanButton: {
     backgroundColor: "#2196F3",
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
-    marginBottom: 20,
-    marginHorizontal: 10,
+    justifyContent: "center",
+    minWidth: 170,
+    marginRight: 10,
+    flexDirection: "row",
+    flex: 1,
   },
   scanButtonText: {
     color: "#fff",
     fontWeight: "bold",
     fontSize: 18,
+  },
+  confirmButton: {
+    backgroundColor: "#24c96b",
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 110,
+    flexDirection: "row",
+    flex: 0.8,
+  },
+  confirmButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+    marginLeft: 5,
   },
 });
