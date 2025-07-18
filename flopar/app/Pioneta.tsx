@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   Alert,
   TouchableOpacity,
+  TextInput,
+  Modal,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -44,11 +46,18 @@ const ProductCard = React.memo(({ item }: ProductCardProps) => (
 
 export default function ScanScreen() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [filtered, setFiltered] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [patente, setPatente] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [search, setSearch] = useState("");
+  const [manualModal, setManualModal] = useState(false);
+  const [manualCode, setManualCode] = useState("");
+  const [manualLoading, setManualLoading] = useState(false);
+
   const router = useRouter();
 
+  // ----------- Cargar productos
   const fetchProductos = useCallback(async () => {
     try {
       setLoading(true);
@@ -65,6 +74,7 @@ export default function ScanScreen() {
         },
       });
       setProducts(productos);
+      setFiltered(productos);
     } catch (error) {
       console.error(error);
       Alert.alert("Error", "No se pudieron cargar los productos.");
@@ -79,13 +89,31 @@ export default function ScanScreen() {
     }, [fetchProductos])
   );
 
+  // ------------- LOGOUT
   const handleLogout = async () => {
     setShowMenu(false);
     await AsyncStorage.clear();
     router.replace(ROUTES.LOGIN);
   };
 
-  // ---- Nuevo handler que asegura patente de usuario autenticado ----
+  // ------------- FILTRO LOCAL
+  const handleSearch = (text: string) => {
+    setSearch(text);
+    if (text.trim() === "") {
+      setFiltered(products);
+    } else {
+      const s = text.toLowerCase();
+      setFiltered(
+        products.filter(
+          (prod) =>
+            prod.name.toLowerCase().includes(s) ||
+            prod.code.toLowerCase().includes(s)
+        )
+      );
+    }
+  };
+
+  // ------------- CUADRATURA
   const handleConfirmQuadrature = async () => {
     try {
       const userDataString = await AsyncStorage.getItem("userData");
@@ -99,11 +127,9 @@ export default function ScanScreen() {
         "Todos los productos están verificados. Puedes salir de bodega."
       );
     } catch (err: any) {
-      // Comienza chequeando si tienes productos pendientes en el detail
       const detail = err?.response?.data?.detail;
       let mensaje = "Aún tienes productos pendientes por verificar.";
 
-      // Si detail es un objeto y tiene pending_products (la versión más útil)
       if (
         detail &&
         typeof detail === "object" &&
@@ -113,15 +139,58 @@ export default function ScanScreen() {
           .map((prod: any) => `${prod.code} (${prod.name})`)
           .join(", ");
         mensaje = `Productos pendientes de verificación:\n${pendientes}`;
-      }
-      // Si detail es un string que contiene los códigos (como en la versión solo arreglo)
-      else if (typeof detail === "string" && detail.includes("verificación")) {
+      } else if (typeof detail === "string" && detail.includes("verificación")) {
         mensaje = detail;
       }
       Alert.alert("No puedes confirmar aún", mensaje);
     }
   };
 
+  // ------------- ESCANEO MANUAL
+  const handleManualScan = async () => {
+    setManualLoading(true);
+    try {
+      const code = manualCode.trim();
+      if (!code) {
+        Alert.alert("Código vacío", "Ingresa el código del producto");
+        setManualLoading(false);
+        return;
+      }
+      const userDataString = await AsyncStorage.getItem("userData");
+      if (!userDataString) throw new Error("No hay usuario autenticado");
+      const userData = JSON.parse(userDataString);
+      const userId = userData.user_id;
+      const { data: batchId } = await axios.get(ENDPOINTS.LAST_BATCH);
+      const res = await axios.get(
+        ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId)
+      );
+      if (!res.data || res.data.length === 0) {
+        Alert.alert("Producto no encontrado", `No existe producto con código: ${code}`);
+        setManualLoading(false);
+        return;
+      }
+      const product = res.data[0];
+      const patchPayload = {
+        status: "Verificado",
+        verified_by: userId,
+        verified_at: new Date().toISOString(),
+      };
+      await axios.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
+      Alert.alert("¡Producto verificado!", `Producto: ${product.name}\nCódigo: ${product.code}`);
+      setManualModal(false);
+      setManualCode("");
+      fetchProductos(); // Actualiza la lista
+    } catch (err: any) {
+      Alert.alert(
+        "Error",
+        err?.response?.data?.detail || "No se pudo verificar el producto"
+      );
+    } finally {
+      setManualLoading(false);
+    }
+  };
+
+  // ---- RENDER
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
       <CustomHeader title="Pioneta" onAvatarPress={() => setShowMenu(true)} />
@@ -146,7 +215,7 @@ export default function ScanScreen() {
             : "Cargando patente..."}
         </Text>
 
-        {/* Botones en fila, ahora ambos son del mismo alto y estilo */}
+        {/* Botones de escaneo y confirmación */}
         <View style={styles.buttonRow}>
           <TouchableOpacity
             style={styles.scanButton}
@@ -165,13 +234,75 @@ export default function ScanScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Barra búsqueda + botón escaneo manual */}
+        <View style={styles.searchRow}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar producto"
+            value={search}
+            onChangeText={handleSearch}
+            returnKeyType="search"
+          />
+          <TouchableOpacity
+            style={styles.manualButton}
+            onPress={() => setManualModal(true)}
+          >
+            <MaterialIcons name="edit" size={22} color="#2196F3" />
+            <Text style={styles.manualButtonText}>Escaneo manual</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Modal escaneo manual */}
+        <Modal
+          visible={manualModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setManualModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={{ fontWeight: "bold", fontSize: 18, marginBottom: 12 }}>
+                Ingresar código manualmente
+              </Text>
+              <TextInput
+                style={styles.manualInput}
+                placeholder="Código del producto"
+                value={manualCode}
+                onChangeText={setManualCode}
+                autoCapitalize="none"
+                autoFocus
+              />
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+                <TouchableOpacity
+                  style={styles.manualSendButton}
+                  onPress={handleManualScan}
+                  disabled={manualLoading}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                    {manualLoading ? "Verificando..." : "Verificar"}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.manualSendButton, { backgroundColor: "#ddd" }]}
+                  onPress={() => setManualModal(false)}
+                  disabled={manualLoading}
+                >
+                  <Text style={{ color: "#333", fontWeight: "bold" }}>
+                    Cancelar
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         {loading ? (
           <ActivityIndicator size="large" color="#2196F3" />
-        ) : products.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <Text style={styles.text}>No hay productos para hoy..</Text>
         ) : (
           <FlatList
-            data={products}
+            data={filtered}
             keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={{ paddingTop: 10, paddingBottom: 30 }}
             renderItem={({ item }) => <ProductCard item={item} />}
@@ -184,7 +315,7 @@ export default function ScanScreen() {
     </View>
   );
 }
-
+const ACTION_HEIGHT = 54;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -244,12 +375,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 20,
+    marginBottom: 15,
     gap: 10,
   },
   scanButton: {
     backgroundColor: "#2196F3",
-    paddingVertical: 14,
+    height: ACTION_HEIGHT,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
@@ -265,7 +396,7 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     backgroundColor: "#24c96b",
-    paddingVertical: 14,
+    height: ACTION_HEIGHT,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
@@ -278,5 +409,73 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
     marginLeft: 5,
+  },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    borderColor: "#bbb",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    backgroundColor: "#fff",
+    height: ACTION_HEIGHT,
+  },
+  manualButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#eaf3fa",
+    borderRadius: 8,
+    marginLeft: 6,
+    borderWidth: 1,
+    borderColor: "#2196F3",
+    paddingHorizontal: 12,
+    height: ACTION_HEIGHT,
+    justifyContent: "center",
+    minWidth: 150,
+  },
+  manualButtonText: {
+    color: "#2196F3",
+    fontWeight: "bold",
+    marginLeft: 5,
+    fontSize: 15,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    padding: 22,
+    borderRadius: 12,
+    width: "90%",
+    alignItems: "center",
+    elevation: 8,
+  },
+  manualInput: {
+    borderWidth: 1,
+    borderColor: "#bbb",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    fontSize: 16,
+    width: "100%",
+    marginBottom: 8,
+    backgroundColor: "#f5f5f5",
+  },
+  manualSendButton: {
+    backgroundColor: "#2196F3",
+    borderRadius: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 22,
+    alignItems: "center",
+    marginHorizontal: 2,
   },
 });
