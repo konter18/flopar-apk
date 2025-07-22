@@ -23,26 +23,32 @@ interface Product {
   name: string;
   code: string;
   patent: string;
-  status: string;
+  status_p: string;
 }
 
 type ProductCardProps = {
   item: Product;
 };
 
-const ProductCard = React.memo(({ item }: ProductCardProps) => (
-  <View style={styles.card}>
-    <Text style={styles.productName}>Nombre: {item.name}</Text>
-    <Text>Código: {item.code}</Text>
-    <Text>Patente: {item.patent}</Text>
-    <Text>
-      Estado:{" "}
-      <Text style={{ color: item.status === "Verificado" ? "green" : "red" }}>
-        {item.status}
-      </Text>
-    </Text>
-  </View>
-));
+const ProductCard = React.memo(
+  ({ item, onPress }: ProductCardProps & { onPress: (id: number) => void }) => (
+    <TouchableOpacity onPress={() => onPress(item.id)} activeOpacity={0.8}>
+      <View style={styles.card}>
+        <Text style={styles.productName}>Nombre: {item.name}</Text>
+        <Text>Código: {item.code}</Text>
+        <Text>Patente: {item.patent}</Text>
+        <Text>
+          Estado:{" "}
+          <Text
+            style={{ color: item.status_p === "Verificado" ? "green" : "red" }}
+          >
+            {item.status_p}
+          </Text>
+        </Text>
+      </View>
+    </TouchableOpacity>
+  )
+);
 
 export default function ScanScreen() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -51,9 +57,14 @@ export default function ScanScreen() {
   const [patente, setPatente] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [search, setSearch] = useState("");
+  //modal manual
   const [manualModal, setManualModal] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const [manualLoading, setManualLoading] = useState(false);
+  //modal producto detalles
+  const [detailModal, setDetailModal] = useState(false);
+  const [productDetail, setProductDetail] = useState<any>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   const router = useRouter();
 
@@ -139,7 +150,10 @@ export default function ScanScreen() {
           .map((prod: any) => `${prod.code} (${prod.name})`)
           .join(", ");
         mensaje = `Productos pendientes de verificación:\n${pendientes}`;
-      } else if (typeof detail === "string" && detail.includes("verificación")) {
+      } else if (
+        typeof detail === "string" &&
+        detail.includes("verificación")
+      ) {
         mensaje = detail;
       }
       Alert.alert("No puedes confirmar aún", mensaje);
@@ -165,18 +179,29 @@ export default function ScanScreen() {
         ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId)
       );
       if (!res.data || res.data.length === 0) {
-        Alert.alert("Producto no encontrado", `No existe producto con código: ${code}`);
+        Alert.alert(
+          "Producto no encontrado",
+          `No existe producto con código: ${code}`
+        );
         setManualLoading(false);
         return;
       }
       const product = res.data[0];
       const patchPayload = {
-        status: "Verificado",
-        verified_by: userId,
-        verified_at: new Date().toISOString(),
+        status_p: "Verificado",
+        verified_by_p: userId,
+        verified_at_p: new Date().toISOString(),
       };
-      await axios.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
-      Alert.alert("¡Producto verificado!", `Producto: ${product.name}\nCódigo: ${product.code}`);
+      await axios.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload, {
+        headers: {
+          Authorization: `Bearer ${userData.access_token}`,
+        },
+      });
+
+      Alert.alert(
+        "¡Producto verificado!",
+        `Producto: ${product.name}\nCódigo: ${product.code}`
+      );
       setManualModal(false);
       setManualCode("");
       fetchProductos(); // Actualiza la lista
@@ -189,7 +214,20 @@ export default function ScanScreen() {
       setManualLoading(false);
     }
   };
-
+  // Handler para mostrar detalle del producto
+  const handleOpenDetail = async (productId: number) => {
+    setLoadingDetail(true);
+    setDetailModal(true);
+    try {
+      const { data } = await axios.get(ENDPOINTS.GET_PRODUCT_DETAIL(productId));
+      setProductDetail(data);
+    } catch (error) {
+      Alert.alert("Error", "No se pudo cargar el detalle del producto");
+      setProductDetail(null);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
   // ---- RENDER
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
@@ -214,7 +252,6 @@ export default function ScanScreen() {
             ? `Trabajando con patente: ${patente}`
             : "Cargando patente..."}
         </Text>
-
         {/* Botones de escaneo y confirmación */}
         <View style={styles.buttonRow}>
           <TouchableOpacity
@@ -233,7 +270,6 @@ export default function ScanScreen() {
             <Text style={styles.confirmButtonText}>Confirmar</Text>
           </TouchableOpacity>
         </View>
-
         {/* Barra búsqueda + botón escaneo manual */}
         <View style={styles.searchRow}>
           <TextInput
@@ -251,7 +287,6 @@ export default function ScanScreen() {
             <Text style={styles.manualButtonText}>Escaneo manual</Text>
           </TouchableOpacity>
         </View>
-
         {/* Modal escaneo manual */}
         <Modal
           visible={manualModal}
@@ -261,7 +296,9 @@ export default function ScanScreen() {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={{ fontWeight: "bold", fontSize: 18, marginBottom: 12 }}>
+              <Text
+                style={{ fontWeight: "bold", fontSize: 18, marginBottom: 12 }}
+              >
                 Ingresar código manualmente
               </Text>
               <TextInput
@@ -295,7 +332,50 @@ export default function ScanScreen() {
             </View>
           </View>
         </Modal>
-
+        {/* Modal de detalle del producto: */}
+        <Modal
+          visible={detailModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setDetailModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              {loadingDetail ? (
+                <ActivityIndicator size="large" color="#2196F3" />
+              ) : productDetail ? (
+                <>
+                  <Text
+                    style={{
+                      fontWeight: "bold",
+                      fontSize: 18,
+                      marginBottom: 8,
+                    }}
+                  >
+                    Detalle del Producto
+                  </Text>
+                  <Text>Nombre: {productDetail.name}</Text>
+                  <Text>Código: {productDetail.code}</Text>
+                  <Text>Patente: {productDetail.patent}</Text>
+                  <Text>Estado: {productDetail.status_p}</Text>
+                  <Text>Cliente: {productDetail.name_client}</Text>
+                  <Text>Teléfono: {productDetail.phone_client}</Text>
+                  {/* Aquí puedes agregar más campos que te entregue tu API */}
+                  <TouchableOpacity
+                    style={[styles.manualSendButton, { marginTop: 12 }]}
+                    onPress={() => setDetailModal(false)}
+                  >
+                    <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                      Cerrar
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <Text>No hay detalles disponibles.</Text>
+              )}
+            </View>
+          </View>
+        </Modal>
         {loading ? (
           <ActivityIndicator size="large" color="#2196F3" />
         ) : filtered.length === 0 ? (
@@ -305,7 +385,9 @@ export default function ScanScreen() {
             data={filtered}
             keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={{ paddingTop: 10, paddingBottom: 30 }}
-            renderItem={({ item }) => <ProductCard item={item} />}
+            renderItem={({ item }) => (
+              <ProductCard item={item} onPress={handleOpenDetail} />
+            )}
             initialNumToRender={10}
             windowSize={7}
             removeClippedSubviews={true}
