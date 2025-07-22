@@ -147,7 +147,7 @@ export default function ScanScreen() {
         Array.isArray(detail.pending_products)
       ) {
         const pendientes = detail.pending_products
-          .map((prod: any) => `${prod.code} (${prod.name})`)
+          .map((prod: any) => `${prod.code}`)
           .join(", ");
         mensaje = `Productos pendientes de verificación:\n${pendientes}`;
       } else if (
@@ -249,7 +249,7 @@ export default function ScanScreen() {
       <View style={styles.container}>
         <Text style={styles.text}>
           {patente
-            ? `Trabajando con patente: ${patente}`
+            ? `Patente asignada: ${patente}`
             : "Cargando patente..."}
         </Text>
         {/* Botones de escaneo y confirmación */}

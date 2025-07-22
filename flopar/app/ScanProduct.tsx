@@ -83,11 +83,11 @@ export default function ScanProductScreen() {
           Authorization: `Bearer ${access_token}`,
         },
       });
-
-      Alert.alert(
-        "¡Producto verificado!",
-        `Producto: ${product.name}\nCódigo: ${product.code}`
-      );
+      let mensaje = `Producto: ${product.name}\nCódigo: ${product.code}`;
+      if (role === "bodega") {
+        mensaje += `\nPatente: ${product.patent}`;
+      }
+      Alert.alert("¡Producto escaneado!", mensaje);
       setTimeout(() => {
         router.back();
       }, 1500);
