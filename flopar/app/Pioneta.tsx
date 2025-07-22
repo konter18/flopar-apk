@@ -23,7 +23,7 @@ interface Product {
   name: string;
   code: string;
   patent: string;
-  status: string;
+  status_p: string;
 }
 
 type ProductCardProps = {
@@ -40,9 +40,9 @@ const ProductCard = React.memo(
         <Text>
           Estado:{" "}
           <Text
-            style={{ color: item.status === "Verificado" ? "green" : "red" }}
+            style={{ color: item.status_p === "Verificado" ? "green" : "red" }}
           >
-            {item.status}
+            {item.status_p}
           </Text>
         </Text>
       </View>
@@ -188,11 +188,16 @@ export default function ScanScreen() {
       }
       const product = res.data[0];
       const patchPayload = {
-        status: "Verificado",
-        verified_by: userId,
-        verified_at: new Date().toISOString(),
+        status_p: "Verificado",
+        verified_by_p: userId,
+        verified_at_p: new Date().toISOString(),
       };
-      await axios.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
+      await axios.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload, {
+        headers: {
+          Authorization: `Bearer ${userData.access_token}`,
+        },
+      });
+
       Alert.alert(
         "¡Producto verificado!",
         `Producto: ${product.name}\nCódigo: ${product.code}`
@@ -214,7 +219,7 @@ export default function ScanScreen() {
     setLoadingDetail(true);
     setDetailModal(true);
     try {
-      const { data } = await axios.get(ENDPOINTS.GET_PRODUCT_DETAIL(productId))
+      const { data } = await axios.get(ENDPOINTS.GET_PRODUCT_DETAIL(productId));
       setProductDetail(data);
     } catch (error) {
       Alert.alert("Error", "No se pudo cargar el detalle del producto");
@@ -352,7 +357,7 @@ export default function ScanScreen() {
                   <Text>Nombre: {productDetail.name}</Text>
                   <Text>Código: {productDetail.code}</Text>
                   <Text>Patente: {productDetail.patent}</Text>
-                  <Text>Estado: {productDetail.status}</Text>
+                  <Text>Estado: {productDetail.status_p}</Text>
                   <Text>Cliente: {productDetail.name_client}</Text>
                   <Text>Teléfono: {productDetail.phone_client}</Text>
                   {/* Aquí puedes agregar más campos que te entregue tu API */}

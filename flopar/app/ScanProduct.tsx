@@ -39,11 +39,14 @@ export default function ScanProductScreen() {
       const code = (barcode.data || barcode.rawValue).trim();
       const userDataString = await AsyncStorage.getItem("userData");
       if (!userDataString) throw new Error("No hay usuario autenticado");
+
       const userData = JSON.parse(userDataString);
-      const userId = userData.user_id;
+      const { user_id, role, access_token } = userData;
       const now = new Date().toISOString();
+
       const batchRes = await axios.get(ENDPOINTS.LAST_BATCH);
       const batchId = batchRes.data?.id || batchRes.data || batchRes;
+
       const searchUrl = ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId);
       const res = await axios.get(searchUrl);
 
@@ -57,13 +60,29 @@ export default function ScanProductScreen() {
       }
 
       const product = res.data[0];
-      const patchPayload = {
-        status: "Verificado",
-        verified_by: userId,
-        verified_at: now,
-      };
 
-      await axios.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
+      let patchPayload: any = {};
+      if (role === "pioneta") {
+        patchPayload = {
+          status_p: "Verificado",
+          verified_by_p: user_id,
+          verified_at_p: now,
+        };
+      } else if (role === "bodega") {
+        patchPayload = {
+          status_b: "Verificado",
+          verified_by_b: user_id,
+          verified_at_b: now,
+        };
+      } else {
+        throw new Error("Rol no autorizado para escaneo");
+      }
+
+      await axios.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload, {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      });
 
       Alert.alert(
         "¡Producto verificado!",

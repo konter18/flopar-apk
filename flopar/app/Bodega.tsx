@@ -23,7 +23,7 @@ interface Product {
   name: string;
   code: string;
   patent: string;
-  status: string;
+  status_b: string;
 }
 interface ProductDetail extends Product {
   name_client: string;
@@ -43,8 +43,10 @@ const ProductCard = React.memo(({ item, onPress }: ProductCardProps) => (
       <Text>Patente: {item.patent}</Text>
       <Text>
         Estado:{" "}
-        <Text style={{ color: item.status === "Verificado" ? "green" : "red" }}>
-          {item.status}
+        <Text
+          style={{ color: item.status_b === "Verificado" ? "green" : "red" }}
+        >
+          {item.status_b}
         </Text>
       </Text>
     </View>
@@ -62,9 +64,13 @@ export default function BodegaScreen() {
   const [manualCode, setManualCode] = useState("");
   const [manualLoading, setManualLoading] = useState(false);
   const [detailModal, setDetailModal] = useState(false);
-  const [productDetail, setProductDetail] = useState<ProductDetail | null>(null);
+  const [productDetail, setProductDetail] = useState<ProductDetail | null>(
+    null
+  );
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [batchId, setBatchId] = useState<number>(0);
+  //constate para filtrar pendientes
+  const [showOnlyPending, setShowOnlyPending] = useState<boolean>(false);
 
   // ---------- LOGOUT
   const handleLogout = async () => {
@@ -103,19 +109,44 @@ export default function BodegaScreen() {
   // ---------- BÚSQUEDA LOCAL
   const handleSearch = (text: string) => {
     setSearch(text);
-    if (text.trim() === "") {
-      setFiltered(products);
+    const searchText = text.toLowerCase();
+
+    const baseList = showOnlyPending
+      ? products.filter((p: Product) => p.status_b !== "Verificado")
+      : products;
+
+    if (searchText.trim() === "") {
+      setFiltered(baseList);
     } else {
-      const s = text.toLowerCase();
       setFiltered(
-        products.filter(
+        baseList.filter(
           (prod) =>
-            prod.name.toLowerCase().includes(s) ||
-            prod.code.toLowerCase().includes(s)
+            prod.name.toLowerCase().includes(searchText) ||
+            prod.code.toLowerCase().includes(searchText)
         )
       );
     }
   };
+  //filter para mostrar solo pendientes
+  React.useEffect(() => {
+    const searchText = search.toLowerCase();
+
+    const baseList = showOnlyPending
+      ? products.filter((p: Product) => p.status_b !== "Verificado")
+      : products;
+
+    if (searchText.trim() === "") {
+      setFiltered(baseList);
+    } else {
+      setFiltered(
+        baseList.filter(
+          (prod) =>
+            prod.name.toLowerCase().includes(searchText) ||
+            prod.code.toLowerCase().includes(searchText)
+        )
+      );
+    }
+  }, [showOnlyPending, search, products]);
 
   // ---------- ESCANEO MANUAL
   const handleManualScan = async () => {
@@ -127,7 +158,15 @@ export default function BodegaScreen() {
         return setManualLoading(false);
       }
 
-      // 1) Decimos que esperamos un array de Product
+      const userDataString = await AsyncStorage.getItem("userData");
+      if (!userDataString) throw new Error("No hay usuario autenticado");
+
+      const userData = JSON.parse(userDataString);
+      const userId = userData.user_id;
+      const role = userData.role;
+      const token = userData.access_token;
+
+      const { data: batchId } = await axios.get(ENDPOINTS.LAST_BATCH);
       const res = await axios.get<Product[]>(
         ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId)
       );
@@ -141,17 +180,31 @@ export default function BodegaScreen() {
       }
 
       const product = res.data[0];
-      const userDataString = await AsyncStorage.getItem("userData");
-      const userData = userDataString ? JSON.parse(userDataString) : {};
-      const userId = userData.user_id as number;
+      const now = new Date().toISOString();
 
-      const patchPayload = {
-        status: "Verificado",
-        verified_by: userId,
-        verified_at: new Date().toISOString(),
-      };
+      // payload según rol
+      let patchPayload: any = {};
+      if (role === "pioneta") {
+        patchPayload = {
+          status_p: "Verificado",
+          verified_by_p: userId,
+          verified_at_p: now,
+        };
+      } else if (role === "bodega") {
+        patchPayload = {
+          status_b: "Verificado",
+          verified_by_b: userId,
+          verified_at_b: now,
+        };
+      } else {
+        throw new Error("Rol no autorizado para escaneo manual");
+      }
 
-      await axios.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
+      await axios.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       Alert.alert(
         "¡Producto verificado!",
@@ -159,13 +212,12 @@ export default function BodegaScreen() {
       );
       setManualModal(false);
       setManualCode("");
-      fetchProductos();
+      fetchProductos(); // refresca la lista
     } catch (err: any) {
-      // 2) `err` es `any`, así que `err.response` ya existe
       const axiosErr = err as AxiosError<{ detail: string }>;
       Alert.alert(
         "Error",
-        axiosErr.response?.data.detail || "No se pudo verificar el producto"
+        axiosErr.response?.data?.detail || "No se pudo verificar el producto"
       );
     } finally {
       setManualLoading(false);
@@ -217,6 +269,17 @@ export default function BodegaScreen() {
             }}
           >
             <Text style={styles.scanButtonText}>Escanear producto</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setShowOnlyPending(!showOnlyPending)}
+          >
+            <MaterialIcons
+              name={showOnlyPending ? "filter-list-off" : "filter-list"}
+              size={22}
+              color="#2196F3"
+            />
           </TouchableOpacity>
         </View>
         {/* Barra búsqueda + botón escaneo manual */}
@@ -306,7 +369,7 @@ export default function BodegaScreen() {
                   <Text>Nombre: {productDetail.name}</Text>
                   <Text>Código: {productDetail.code}</Text>
                   <Text>Patente: {productDetail.patent}</Text>
-                  <Text>Estado: {productDetail.status}</Text>
+                  <Text>Estado: {productDetail.status_b}</Text>
                   <Text>Cliente: {productDetail.name_client}</Text>
                   <Text>Teléfono: {productDetail.phone_client}</Text>
                   <TouchableOpacity
@@ -507,5 +570,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     alignItems: "center",
     marginHorizontal: 2,
+  },
+  filterButton: {
+    height: ACTION_HEIGHT,
+    width: ACTION_HEIGHT,
+    backgroundColor: "#eaf3fa",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2196F3",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
