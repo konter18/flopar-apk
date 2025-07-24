@@ -16,7 +16,8 @@ import { ROUTES } from "../constants/routes";
 import { ENDPOINTS } from "../constants/endpoints";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialIcons } from "@expo/vector-icons";
-import axios, { AxiosError } from "axios";
+import api from "../utils/api";
+import { AxiosError } from "axios";
 
 interface Product {
   id: number;
@@ -83,9 +84,9 @@ export default function BodegaScreen() {
   const fetchProductos = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: batchId } = await axios.get(ENDPOINTS.LAST_BATCH);
+      const { data: batchId } = await api.get(ENDPOINTS.LAST_BATCH);
       setBatchId(batchId);
-      const { data: productos } = await axios.get(ENDPOINTS.GET_PRODUCT, {
+      const { data: productos } = await api.get(ENDPOINTS.GET_PRODUCT, {
         params: {
           batch_id: batchId,
         },
@@ -164,10 +165,9 @@ export default function BodegaScreen() {
       const userData = JSON.parse(userDataString);
       const userId = userData.user_id;
       const role = userData.role;
-      const token = userData.access_token;
 
-      const { data: batchId } = await axios.get(ENDPOINTS.LAST_BATCH);
-      const res = await axios.get<Product[]>(
+      const { data: batchId } = await api.get(ENDPOINTS.LAST_BATCH);
+      const res = await api.get<Product[]>(
         ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId)
       );
 
@@ -200,11 +200,7 @@ export default function BodegaScreen() {
         throw new Error("Rol no autorizado para escaneo manual");
       }
 
-      await axios.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
 
       Alert.alert(
         "¡Producto verificado!",
@@ -229,7 +225,7 @@ export default function BodegaScreen() {
     setLoadingDetail(true);
     setDetailModal(true);
     try {
-      const { data } = await axios.get<ProductDetail>(
+      const { data } = await api.get<ProductDetail>(
         ENDPOINTS.GET_PRODUCT_DETAIL(productId)
       );
       setProductDetail(data);
