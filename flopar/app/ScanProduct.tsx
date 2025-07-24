@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Camera, CameraView } from "expo-camera";
 import { useRouter } from "expo-router";
-import axios from "axios";
+import api from "../utils/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ENDPOINTS } from "../constants/endpoints";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -44,11 +44,11 @@ export default function ScanProductScreen() {
       const { user_id, role, access_token } = userData;
       const now = new Date().toISOString();
 
-      const batchRes = await axios.get(ENDPOINTS.LAST_BATCH);
+      const batchRes = await api.get(ENDPOINTS.LAST_BATCH);
       const batchId = batchRes.data?.id || batchRes.data || batchRes;
 
       const searchUrl = ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId);
-      const res = await axios.get(searchUrl);
+      const res = await api.get(searchUrl);
 
       if (!res.data || res.data.length === 0) {
         Alert.alert(
@@ -78,11 +78,7 @@ export default function ScanProductScreen() {
         throw new Error("Rol no autorizado para escaneo");
       }
 
-      await axios.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload, {
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-        },
-      });
+      await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
       let mensaje = `Producto: ${product.name}\nCódigo: ${product.code}`;
       if (role === "bodega") {
         mensaje += `\nPatente: ${product.patent}`;

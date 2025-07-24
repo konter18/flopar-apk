@@ -25,3 +25,8 @@ export const clearUserSession = async () => {
     console.error("Error al eliminar sesión:", error);
   }
 };
+
+export const getAccessToken = async (): Promise<string | null> => {
+  const session = await getUserSession();
+  return session?.access_token || null;
+};

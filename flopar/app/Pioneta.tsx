@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
+import api from "../utils/api";
 import { ENDPOINTS } from "../constants/endpoints";
 import CustomHeader from "./components/CustomHeader";
 import { ROUTES } from "../constants/routes";
@@ -77,8 +77,8 @@ export default function ScanScreen() {
       const userData = JSON.parse(userDataString);
       const userPatente = userData.patent;
       setPatente(userPatente);
-      const { data: batchId } = await axios.get(ENDPOINTS.LAST_BATCH);
-      const { data: productos } = await axios.get(ENDPOINTS.GET_PRODUCT, {
+      const { data: batchId } = await api.get(ENDPOINTS.LAST_BATCH);
+      const { data: productos } = await api.get(ENDPOINTS.GET_PRODUCT, {
         params: {
           batch_id: batchId,
           patent: userPatente,
@@ -132,7 +132,7 @@ export default function ScanScreen() {
       const userData = JSON.parse(userDataString);
       const userPatente = userData.patent;
 
-      await axios.post(ENDPOINTS.CONFIRM_QUADRATURE(userPatente));
+      await api.post(ENDPOINTS.CONFIRM_QUADRATURE(userPatente));
       Alert.alert(
         "¡Cuadratura confirmada!",
         "Todos los productos están verificados. Puedes salir de bodega."
@@ -174,8 +174,8 @@ export default function ScanScreen() {
       if (!userDataString) throw new Error("No hay usuario autenticado");
       const userData = JSON.parse(userDataString);
       const userId = userData.user_id;
-      const { data: batchId } = await axios.get(ENDPOINTS.LAST_BATCH);
-      const res = await axios.get(
+      const { data: batchId } = await api.get(ENDPOINTS.LAST_BATCH);
+      const res = await api.get(
         ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId)
       );
       if (!res.data || res.data.length === 0) {
@@ -192,11 +192,7 @@ export default function ScanScreen() {
         verified_by_p: userId,
         verified_at_p: new Date().toISOString(),
       };
-      await axios.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload, {
-        headers: {
-          Authorization: `Bearer ${userData.access_token}`,
-        },
-      });
+      await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
 
       Alert.alert(
         "¡Producto verificado!",
@@ -219,7 +215,7 @@ export default function ScanScreen() {
     setLoadingDetail(true);
     setDetailModal(true);
     try {
-      const { data } = await axios.get(ENDPOINTS.GET_PRODUCT_DETAIL(productId));
+      const { data } = await api.get(ENDPOINTS.GET_PRODUCT_DETAIL(productId));
       setProductDetail(data);
     } catch (error) {
       Alert.alert("Error", "No se pudo cargar el detalle del producto");
