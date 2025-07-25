@@ -15,11 +15,12 @@ export const ENDPOINTS = {
     `${BASE_URL}/product/search-product/?query=${encodeURIComponent(searchTerm)}&batch_id=${batchId}`,
   PATCH_PRODUCT: (id: number | string) => `${BASE_URL}/product/${id}`,
   CONFIRM_QUADRATURE: (patente: string) => `${BASE_URL}/product/patente/${encodeURIComponent(patente)}/confirm-quadrature`,
-
-
+  SEND_WHATSAPP: `${BASE_URL}/whatsapp/send`,
+  SCAN_PRODUCT: (productId: number | string) => `${BASE_URL}/scan/${productId}`,
 
   // Usuarios
   GET_USER: `${BASE_URL}/users/`,
   POST_USER: `${BASE_URL}/users/`,
   PATCH_USER: (id: number | string) => `${BASE_URL}/users/${id}`,
+  GET_ADMIN_PHONE: `${BASE_URL}/users/admin-phone`,
 };

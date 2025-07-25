@@ -79,6 +79,7 @@ export default function ScanProductScreen() {
       }
 
       await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
+      await api.post(ENDPOINTS.SCAN_PRODUCT(product.id),{},);
       let mensaje = `Producto: ${product.name}\nCódigo: ${product.code}`;
       if (role === "bodega") {
         mensaje += `\nPatente: ${product.patent}`;
