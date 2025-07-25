@@ -65,7 +65,10 @@ export default function ScanScreen() {
   const [detailModal, setDetailModal] = useState(false);
   const [productDetail, setProductDetail] = useState<any>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
-
+  // estado del teléfono del admin
+  const [adminPhone, setAdminPhone] = useState<string | null>(null);
+  // estado de confirmación de cuadratura
+  const [confirmado, setConfirmado] = useState(false);
   const router = useRouter();
 
   // ----------- Cargar productos
@@ -100,6 +103,16 @@ export default function ScanScreen() {
     }, [fetchProductos])
   );
 
+  //cargar telefono del admin
+  const fetchAdminPhone = async () => {
+    try {
+      const { data } = await api.get(ENDPOINTS.GET_ADMIN_PHONE);
+      setAdminPhone(data.phone);
+    } catch (error) {
+      console.error("No se pudo obtener el teléfono del admin", error);
+    }
+  };
+
   // ------------- LOGOUT
   const handleLogout = async () => {
     setShowMenu(false);
@@ -124,18 +137,42 @@ export default function ScanScreen() {
     }
   };
 
-  // ------------- CUADRATURA
   const handleConfirmQuadrature = async () => {
+    if (confirmado) return;
+
     try {
       const userDataString = await AsyncStorage.getItem("userData");
       if (!userDataString) throw new Error("No hay usuario autenticado");
+
       const userData = JSON.parse(userDataString);
       const userPatente = userData.patent;
+      const usuario = `${userData.first_name} ${userData.last_name}`;
 
+      // Confirmar cuadratura
       await api.post(ENDPOINTS.CONFIRM_QUADRATURE(userPatente));
+
+      // Obtener número del administrador por ubicación
+      const { data } = await api.get(ENDPOINTS.GET_ADMIN_PHONE);
+      const adminPhone = data.phone;
+
+      if (!adminPhone) {
+        Alert.alert(
+          "Error",
+          "No se encontró número del administrador de la sucursal."
+        );
+        return;
+      }
+
+      // Enviar mensaje por WhatsApp
+      await api.post(ENDPOINTS.SEND_WHATSAPP, {
+        to: adminPhone,
+        message: `Camión correspondiente al usuario ${usuario} de patente ${userPatente} ha confirmado su cuadratura con éxito.`,
+      });
+      setConfirmado(true);
+
       Alert.alert(
         "¡Cuadratura confirmada!",
-        "Todos los productos están verificados. Puedes salir de bodega."
+        "Todos los productos están verificados y se ha enviado el mensaje de confirmación."
       );
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
@@ -156,6 +193,7 @@ export default function ScanScreen() {
       ) {
         mensaje = detail;
       }
+
       Alert.alert("No puedes confirmar aún", mensaje);
     }
   };
@@ -175,9 +213,7 @@ export default function ScanScreen() {
       const userData = JSON.parse(userDataString);
       const userId = userData.user_id;
       const { data: batchId } = await api.get(ENDPOINTS.LAST_BATCH);
-      const res = await api.get(
-        ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId)
-      );
+      const res = await api.get(ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId));
       if (!res.data || res.data.length === 0) {
         Alert.alert(
           "Producto no encontrado",
@@ -194,13 +230,15 @@ export default function ScanScreen() {
       };
       await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
 
+      await api.post(ENDPOINTS.SCAN_PRODUCT(product.id),{},);
+
       Alert.alert(
         "¡Producto verificado!",
         `Producto: ${product.name}\nCódigo: ${product.code}`
       );
       setManualModal(false);
       setManualCode("");
-      fetchProductos(); // Actualiza la lista
+      fetchProductos();
     } catch (err: any) {
       Alert.alert(
         "Error",
@@ -244,9 +282,7 @@ export default function ScanScreen() {
       )}
       <View style={styles.container}>
         <Text style={styles.text}>
-          {patente
-            ? `Patente asignada: ${patente}`
-            : "Cargando patente..."}
+          {patente ? `Patente asignada: ${patente}` : "Cargando patente..."}
         </Text>
         {/* Botones de escaneo y confirmación */}
         <View style={styles.buttonRow}>
@@ -259,8 +295,12 @@ export default function ScanScreen() {
             <Text style={styles.scanButtonText}>Escanear producto</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.confirmButton}
-            onPress={handleConfirmQuadrature}
+            style={[
+              styles.confirmButton,
+              confirmado && { backgroundColor: "#ccc" },
+            ]}
+            onPress={!confirmado ? handleConfirmQuadrature : undefined}
+            activeOpacity={confirmado ? 1 : 0.7}
           >
             <MaterialIcons name="check" size={26} color="#fff" />
             <Text style={styles.confirmButtonText}>Confirmar</Text>
