@@ -21,7 +21,9 @@ export default function LoginScreen() {
     try {
       const response = await api.post(
         ENDPOINTS.GET_TOKEN,
-        `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+        `username=${encodeURIComponent(username)}&password=${encodeURIComponent(
+          password
+        )}`,
         {
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
@@ -30,6 +32,16 @@ export default function LoginScreen() {
       );
 
       const data = response.data;
+
+      if (data.is_active === false) {
+        Alert.alert(
+          "Usuario deshabilitado",
+          "No tienes permisos para acceder."
+        );
+        setLoading(false);
+        return;
+      }
+
       await saveUserSession(data);
 
       const session = await getUserSession();
