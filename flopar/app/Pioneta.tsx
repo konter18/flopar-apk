@@ -24,6 +24,7 @@ interface Product {
   code: string;
   patent: string;
   status_p: string;
+  location: string;
 }
 
 type ProductCardProps = {
@@ -45,6 +46,7 @@ const ProductCard = React.memo(
             {item.status_p}
           </Text>
         </Text>
+        <Text>Sucursal: {item.location}</Text>
       </View>
     </TouchableOpacity>
   )
@@ -223,6 +225,22 @@ export default function ScanScreen() {
         return;
       }
       const product = res.data[0];
+
+      if (userData.role === "pioneta") {
+        if (
+          !product.patent ||
+          !userData.patent ||
+          product.patent !== userData.patent
+        ) {
+          Alert.alert(
+            "Patente no autorizada",
+            `Este producto pertenece a la patente ${product.patent}, no puedes escanearlo`
+          );
+          setManualLoading(false);
+          return;
+        }
+      }
+
       const patchPayload = {
         status_p: "Verificado",
         verified_by_p: userId,
@@ -230,7 +248,7 @@ export default function ScanScreen() {
       };
       await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
 
-      await api.post(ENDPOINTS.SCAN_PRODUCT(product.id),{},);
+      await api.post(ENDPOINTS.SCAN_PRODUCT(product.id), {});
 
       Alert.alert(
         "¡Producto verificado!",
