@@ -61,6 +61,21 @@ export default function ScanProductScreen() {
 
       const product = res.data[0];
 
+      if (role === "pioneta") {
+        if (
+          !product.patent ||
+          !userData.patent ||
+          product.patent !== userData.patent
+        ) {
+          Alert.alert(
+            "Patente no autorizada",
+            `Este producto pertenece a la patente ${product.patent}, no puedes escanearlo`
+          );
+          setLoading(false);
+          return;
+        }
+      }
+
       let patchPayload: any = {};
       if (role === "pioneta") {
         patchPayload = {
@@ -79,7 +94,7 @@ export default function ScanProductScreen() {
       }
 
       await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
-      await api.post(ENDPOINTS.SCAN_PRODUCT(product.id),{},);
+      await api.post(ENDPOINTS.SCAN_PRODUCT(product.id), {});
       let mensaje = `Producto: ${product.name}\nCódigo: ${product.code}`;
       if (role === "bodega") {
         mensaje += `\nPatente: ${product.patent}`;
