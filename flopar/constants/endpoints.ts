@@ -9,6 +9,7 @@ export const ENDPOINTS = {
 
   // Productos
   GET_PRODUCT: `${BASE_URL}/product/`,
+  GET_PRODUCT_PIONETA: `${BASE_URL}/product/pioneta`,
   GET_PRODUCT_DETAIL: (id: number | string) => `${BASE_URL}/product/${id}`,
   POST_PRODUCT: `${BASE_URL}/product/`,
   GET_PRODUCTS_FILTERED: (searchTerm: string, batchId: number | string) =>

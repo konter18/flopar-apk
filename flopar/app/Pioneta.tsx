@@ -83,7 +83,7 @@ export default function ScanScreen() {
       const userPatente = userData.patent;
       setPatente(userPatente);
       const { data: batchId } = await api.get(ENDPOINTS.LAST_BATCH);
-      const { data: productos } = await api.get(ENDPOINTS.GET_PRODUCT, {
+      const { data: productos } = await api.get(ENDPOINTS.GET_PRODUCT_PIONETA, {
         params: {
           batch_id: batchId,
           patent: userPatente,
@@ -150,28 +150,42 @@ export default function ScanScreen() {
       const userPatente = userData.patent;
       const usuario = `${userData.first_name} ${userData.last_name}`;
 
-      // Confirmar cuadratura
+      // Paso 1: Confirmar cuadratura
       await api.post(ENDPOINTS.CONFIRM_QUADRATURE(userPatente));
+      setConfirmado(true);
 
-      // Obtener número del administrador por ubicación
-      const { data } = await api.get(ENDPOINTS.GET_ADMIN_PHONE);
-      const adminPhone = data.phone;
+      // Paso 2: Intentar obtener teléfono del admin
+      let adminPhone: string | null = null;
+      try {
+        const { data } = await api.get(ENDPOINTS.GET_ADMIN_PHONE);
+        adminPhone = data.phone || null;
+      } catch (error) {
+        console.warn("No se pudo obtener el número del administrador:", error);
+      }
 
-      if (!adminPhone) {
+      // Paso 3: Enviar mensaje si hay número
+      if (adminPhone) {
+        try {
+          await api.post(ENDPOINTS.SEND_WHATSAPP, {
+            to: adminPhone,
+            message: `Camión correspondiente al usuario ${usuario} de patente ${userPatente} ha confirmado su cuadratura con éxito.`,
+          });
+        } catch (error) {
+          Alert.alert(
+            "Cuadratura confirmada",
+            "Se confirmó la cuadratura pero no se pudo enviar el mensaje al administrador."
+          );
+          return;
+        }
+      } else {
         Alert.alert(
-          "Error",
-          "No se encontró número del administrador de la sucursal."
+          "Cuadratura confirmada",
+          "No se encontró número de teléfono del administrador para enviar mensaje."
         );
         return;
       }
 
-      // Enviar mensaje por WhatsApp
-      await api.post(ENDPOINTS.SEND_WHATSAPP, {
-        to: adminPhone,
-        message: `Camión correspondiente al usuario ${usuario} de patente ${userPatente} ha confirmado su cuadratura con éxito.`,
-      });
-      setConfirmado(true);
-
+      // Confirmación final
       Alert.alert(
         "¡Cuadratura confirmada!",
         "Todos los productos están verificados y se ha enviado el mensaje de confirmación."
