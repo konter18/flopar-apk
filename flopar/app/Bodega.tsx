@@ -72,7 +72,15 @@ export default function BodegaScreen() {
   const [batchId, setBatchId] = useState<number>(0);
   //constate para filtrar pendientes
   const [showOnlyPending, setShowOnlyPending] = useState<boolean>(false);
+  //refresh de la pagina
+  const [refreshing, setRefreshing] = useState(false);
 
+  //handle refresh
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchProductos();
+    setRefreshing(false);
+  };
   // ---------- LOGOUT
   const handleLogout = async () => {
     setShowMenu(false);
@@ -398,6 +406,8 @@ export default function BodegaScreen() {
             initialNumToRender={10}
             windowSize={7}
             removeClippedSubviews={true}
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
           />
         )}
       </View>

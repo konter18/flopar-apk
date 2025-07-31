@@ -52,9 +52,6 @@ export default function LoginScreen() {
       }
 
       switch (data.role) {
-        case "admin":
-          router.replace(ROUTES.ADMINISTRATIVO);
-          break;
         case "bodega":
           router.replace(ROUTES.BODEGA);
           break;
@@ -62,7 +59,7 @@ export default function LoginScreen() {
           router.replace(ROUTES.PIONETA);
           break;
         default:
-          router.replace(ROUTES.HOME);
+          Alert.alert("Rol no reconocido", "Tu cuenta no tiene acceso asignado.");
           break;
       }
     } catch (error: any) {

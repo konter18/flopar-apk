@@ -15,6 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../utils/api";
 import { ENDPOINTS } from "../constants/endpoints";
 import CustomHeader from "./components/CustomHeader";
+import PullToRefresh from "./components/PullToRefresh";
 import { ROUTES } from "../constants/routes";
 import { MaterialIcons } from "@expo/vector-icons";
 
@@ -72,6 +73,14 @@ export default function ScanScreen() {
   // estado de confirmación de cuadratura
   const [confirmado, setConfirmado] = useState(false);
   const router = useRouter();
+  //recargar pagina
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchProductos();
+    setRefreshing(false);
+  };
 
   // ----------- Cargar productos
   const fetchProductos = useCallback(async () => {
@@ -459,6 +468,8 @@ export default function ScanScreen() {
             initialNumToRender={10}
             windowSize={7}
             removeClippedSubviews={true}
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
           />
         )}
       </View>

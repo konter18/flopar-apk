@@ -3,10 +3,8 @@ export const ROUTES = {
   LOGIN: "/",
   
   // Privadas
-  HOME: "/Home",
   BODEGA: "/Bodega",
   PIONETA: "/Pioneta",
-  ADMINISTRATIVO: "/Administrativo",
 
   // Otras
   NOT_FOUND: "/404",
