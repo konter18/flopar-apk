@@ -26,6 +26,7 @@ interface Product {
   patent: string;
   status_p: string;
   location: string;
+  address: string;
 }
 
 type ProductCardProps = {
@@ -431,12 +432,13 @@ export default function ScanScreen() {
                   >
                     Detalle del Producto
                   </Text>
-                  <Text>Nombre: {productDetail.name}</Text>
                   <Text>Código: {productDetail.code}</Text>
-                  <Text>Patente: {productDetail.patent}</Text>
-                  <Text>Estado: {productDetail.status_p}</Text>
+                  <Text>Nombre: {productDetail.name}</Text>
+                  <Text>Dirección: {productDetail.address}</Text>
                   <Text>Cliente: {productDetail.name_client}</Text>
                   <Text>Teléfono: {productDetail.phone_client}</Text>
+                  <Text>Estado: {productDetail.status_p}</Text>
+                  <Text>Patente: {productDetail.patent}</Text>
                   {/* Aquí puedes agregar más campos que te entregue tu API */}
                   <TouchableOpacity
                     style={[styles.manualSendButton, { marginTop: 12 }]}
