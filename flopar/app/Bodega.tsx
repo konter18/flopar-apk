@@ -292,6 +292,7 @@ export default function BodegaScreen() {
           <TextInput
             style={styles.searchInput}
             placeholder="Buscar producto"
+            placeholderTextColor="#111827"
             value={search}
             onChangeText={handleSearch}
             returnKeyType="search"
@@ -520,6 +521,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     borderColor: "#bbb",
+    color: "#111827",
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,

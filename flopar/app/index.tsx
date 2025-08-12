@@ -85,6 +85,7 @@ export default function LoginScreen() {
       <TextInput
         style={styles.input}
         placeholder="Usuario"
+        placeholderTextColor="#111827"
         value={username}
         onChangeText={setUsername}
         editable={!loading}
@@ -92,6 +93,7 @@ export default function LoginScreen() {
       <TextInput
         style={styles.input}
         placeholder="Contraseña"
+        placeholderTextColor="#111827"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
@@ -108,10 +110,11 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: "center", padding: 20 },
-  title: { fontSize: 24, marginBottom: 20, textAlign: "center" },
+  title: { color: "#111827", fontSize: 24, marginBottom: 20, textAlign: "center" },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: "#D1D5DB",
+    color: "#111827",
     padding: 10,
     marginBottom: 15,
     borderRadius: 5,

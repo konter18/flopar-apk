@@ -2,18 +2,19 @@
   "expo": {
     "name": "flopar",
     "slug": "flopar",
+    "owner": "konter18", 
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/camion.png",
     "scheme": "flopar",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.flopar.transportes" 
+      "bundleIdentifier": "com.flopar.transportes"
     },
     "android": {
-      "package": "com.flopar.transportes", 
+      "package": "com.flopar.transportes",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -39,6 +40,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9bcbca8b-9462-42b6-8267-36937bca5ee3"
+      }
     }
   }
 }
