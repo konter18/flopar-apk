@@ -324,7 +324,7 @@ export default function ScanScreen() {
       )}
       <View style={styles.container}>
         <Text style={styles.text}>
-          {patente ? `Patente asignada: ${patente}` : "Cargando patente..."}
+          {patente ? `Patente asignada: ${patente}` : "No hay patente asignada..."}
         </Text>
         {/* Botones de escaneo y confirmación */}
         <View style={styles.buttonRow}>

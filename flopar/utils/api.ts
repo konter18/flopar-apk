@@ -5,7 +5,7 @@ import { router } from "expo-router";
 import { ROUTES } from "../constants/routes";
 
 const api = axios.create({
-  baseURL: "http://192.168.1.80:8000",
+  baseURL: process.env.EXPO_PUBLIC_API_URL,
 });
 
 api.interceptors.request.use(
