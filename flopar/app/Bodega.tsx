@@ -76,6 +76,11 @@ export default function BodegaScreen() {
   //refresh de la pagina
   const [refreshing, setRefreshing] = useState(false);
 
+  // modal de selección cuando hay más de un match
+  const [selectModal, setSelectModal] = useState(false);
+  const [selectResults, setSelectResults] = useState<Product[]>([]);
+  const [selectLoading, setSelectLoading] = useState(false);
+
   //handle refresh
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -88,6 +93,31 @@ export default function BodegaScreen() {
     await AsyncStorage.clear();
     router.replace(ROUTES.LOGIN);
   };
+
+  //verificar reutilizable
+  async function verifyProductBodega(product: Product) {
+    const userDataString = await AsyncStorage.getItem("userData");
+    if (!userDataString) throw new Error("No hay usuario autenticado");
+    const user = JSON.parse(userDataString);
+    const userId = user.user_id;
+
+    const patchPayload = {
+      status_b: "Verificado",
+      verified_by_b: userId,
+      verified_at_b: new Date().toISOString(),
+    };
+
+    await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
+
+    Alert.alert(
+      "¡Producto verificado!",
+      `Producto: ${product.name}\nCódigo: ${product.code}`
+    );
+
+    setManualModal(false);
+    setManualCode("");
+    await fetchProductos(); // refrescar listado
+  }
 
   // ---------- CARGAR PRODUCTOS (todos los del batch)
   const fetchProductos = useCallback(async () => {
@@ -165,64 +195,34 @@ export default function BodegaScreen() {
       const code = manualCode.trim();
       if (!code) {
         Alert.alert("Código vacío", "Ingresa el código del producto");
-        return setManualLoading(false);
+        return;
       }
-
-      const userDataString = await AsyncStorage.getItem("userData");
-      if (!userDataString) throw new Error("No hay usuario autenticado");
-
-      const userData = JSON.parse(userDataString);
-      const userId = userData.user_id;
-      const role = userData.role;
 
       const { data: batchId } = await api.get(ENDPOINTS.LAST_BATCH);
       const res = await api.get<Product[]>(
         ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId)
       );
+      const resultados = res.data ?? [];
 
-      if (!res.data.length) {
+      if (resultados.length === 0) {
         Alert.alert(
           "Producto no encontrado",
           `No existe producto con código: ${code}`
         );
-        return setManualLoading(false);
+        return;
       }
 
-      const product = res.data[0];
-      const now = new Date().toISOString();
-
-      // payload según rol
-      let patchPayload: any = {};
-      if (role === "pioneta") {
-        patchPayload = {
-          status_p: "Verificado",
-          verified_by_p: userId,
-          verified_at_p: now,
-        };
-      } else if (role === "bodega") {
-        patchPayload = {
-          status_b: "Verificado",
-          verified_by_b: userId,
-          verified_at_b: now,
-        };
-      } else {
-        throw new Error("Rol no autorizado para escaneo manual");
+      if (resultados.length === 1) {
+        await verifyProductBodega(resultados[0]);
+        return;
       }
-
-      await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
-
-      Alert.alert(
-        "¡Producto verificado!",
-        `Producto: ${product.name}\nCódigo: ${product.code}`
-      );
+      setSelectResults(resultados);
       setManualModal(false);
-      setManualCode("");
-      fetchProductos(); // refresca la lista
+      setSelectModal(true);
     } catch (err: any) {
-      const axiosErr = err as AxiosError<{ detail: string }>;
       Alert.alert(
         "Error",
-        axiosErr.response?.data?.detail || "No se pudo verificar el producto"
+        err?.response?.data?.detail || "No se pudo verificar el producto"
       );
     } finally {
       setManualLoading(false);
@@ -391,6 +391,78 @@ export default function BodegaScreen() {
               ) : (
                 <Text>No hay detalles disponibles.</Text>
               )}
+            </View>
+          </View>
+        </Modal>
+        {/* Modal selección de producto cuando hay múltiples coincidencias */}
+        <Modal
+          visible={selectModal}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setSelectModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text
+                style={{ fontWeight: "bold", fontSize: 18, marginBottom: 12 }}
+              >
+                Seleccionar producto a escanear
+              </Text>
+
+              {selectLoading ? (
+                <ActivityIndicator size="large" color="#2196F3" />
+              ) : (
+                <FlatList
+                  data={selectResults}
+                  keyExtractor={(p) => p.id.toString()}
+                  ItemSeparatorComponent={() => (
+                    <View style={styles.separator} />
+                  )}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.selectItem}
+                      onPress={async () => {
+                        try {
+                          setSelectLoading(true);
+                          await verifyProductBodega(item);
+                          setSelectModal(false);
+                        } finally {
+                          setSelectLoading(false);
+                        }
+                      }}
+                    >
+                      <Text style={{ fontWeight: "bold" }}>
+                        Folio: {item.code} — {item.name}
+                      </Text>
+                      <Text>Patente: {item.patent || "—"}</Text>
+                      <Text>
+                        Estado:{" "}
+                        <Text
+                          style={{
+                            color:
+                              item.status_b === "Verificado" ? "green" : "red",
+                          }}
+                        >
+                          {item.status_b}
+                        </Text>
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                />
+              )}
+
+              <TouchableOpacity
+                style={[
+                  styles.manualSendButton,
+                  { marginTop: 12, backgroundColor: "#ddd" },
+                ]}
+                onPress={() => setSelectModal(false)}
+                disabled={selectLoading}
+              >
+                <Text style={{ color: "#333", fontWeight: "bold" }}>
+                  Cancelar
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </Modal>
@@ -590,5 +662,13 @@ const styles = StyleSheet.create({
     borderColor: "#2196F3",
     alignItems: "center",
     justifyContent: "center",
+  },
+  separator: {
+    height: 1,
+    backgroundColor: "#E5E7EB",
+    marginVertical: 8,
+  },
+  selectItem: {
+    paddingVertical: 10,
   },
 });

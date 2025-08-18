@@ -27,6 +27,7 @@ interface Product {
   status_p: string;
   location: string;
   address: string;
+  stock: number;
 }
 
 type ProductCardProps = {
@@ -55,6 +56,10 @@ const ProductCard = React.memo(
 );
 
 export default function ScanScreen() {
+  const [selectModal, setSelectModal] = useState(false);
+  const [selectResults, setSelectResults] = useState<Product[]>([]);
+  const [selectLoading, setSelectLoading] = useState(false);
+
   const [products, setProducts] = useState<Product[]>([]);
   const [filtered, setFiltered] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +87,51 @@ export default function ScanScreen() {
     await fetchProductos();
     setRefreshing(false);
   };
+
+  //verificar productos repetidos
+  async function verifyProduct(product: Product) {
+    // user & seguridad
+    const userDataString = await AsyncStorage.getItem("userData");
+    if (!userDataString) throw new Error("No hay usuario autenticado");
+    const userData = JSON.parse(userDataString);
+    const userId = userData.user_id;
+
+    // si es pioneta, validar patente
+    if (userData.role === "pioneta") {
+      if (
+        !product.patent ||
+        !userData.patent ||
+        product.patent !== userData.patent
+      ) {
+        Alert.alert(
+          "Patente no autorizada",
+          `Este producto pertenece a la patente ${product.patent}, no puedes escanearlo`
+        );
+        return;
+      }
+    }
+
+    // payload patch
+    const patchPayload = {
+      status_p: "Verificado",
+      verified_by_p: userId,
+      verified_at_p: new Date().toISOString(),
+    };
+
+    // ejecutar patch + registrar escaneo
+    await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
+    await api.post(ENDPOINTS.SCAN_PRODUCT(product.id), {});
+
+    Alert.alert(
+      "¡Producto verificado!",
+      `Producto: ${product.name}\nCódigo: ${product.code}`
+    );
+
+    // refrescar
+    setManualModal(false);
+    setManualCode("");
+    await fetchProductos();
+  }
 
   // ----------- Cargar productos
   const fetchProductos = useCallback(async () => {
@@ -231,56 +281,30 @@ export default function ScanScreen() {
       const code = manualCode.trim();
       if (!code) {
         Alert.alert("Código vacío", "Ingresa el código del producto");
-        setManualLoading(false);
         return;
       }
-      const userDataString = await AsyncStorage.getItem("userData");
-      if (!userDataString) throw new Error("No hay usuario autenticado");
-      const userData = JSON.parse(userDataString);
-      const userId = userData.user_id;
+
       const { data: batchId } = await api.get(ENDPOINTS.LAST_BATCH);
       const res = await api.get(ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId));
-      if (!res.data || res.data.length === 0) {
+      const resultados: Product[] = res.data ?? [];
+
+      if (resultados.length === 0) {
         Alert.alert(
           "Producto no encontrado",
           `No existe producto con código: ${code}`
         );
-        setManualLoading(false);
         return;
       }
-      const product = res.data[0];
 
-      if (userData.role === "pioneta") {
-        if (
-          !product.patent ||
-          !userData.patent ||
-          product.patent !== userData.patent
-        ) {
-          Alert.alert(
-            "Patente no autorizada",
-            `Este producto pertenece a la patente ${product.patent}, no puedes escanearlo`
-          );
-          setManualLoading(false);
-          return;
-        }
+      if (resultados.length === 1) {
+        // caso simple: verificar directo
+        await verifyProduct(resultados[0]);
+        return;
       }
 
-      const patchPayload = {
-        status_p: "Verificado",
-        verified_by_p: userId,
-        verified_at_p: new Date().toISOString(),
-      };
-      await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
-
-      await api.post(ENDPOINTS.SCAN_PRODUCT(product.id), {});
-
-      Alert.alert(
-        "¡Producto verificado!",
-        `Producto: ${product.name}\nCódigo: ${product.code}`
-      );
-      setManualModal(false);
-      setManualCode("");
-      fetchProductos();
+      // caso múltiple: abrir selección
+      setSelectResults(resultados);
+      setSelectModal(true);
     } catch (err: any) {
       Alert.alert(
         "Error",
@@ -290,6 +314,7 @@ export default function ScanScreen() {
       setManualLoading(false);
     }
   };
+
   // Handler para mostrar detalle del producto
   const handleOpenDetail = async (productId: number) => {
     setLoadingDetail(true);
@@ -324,7 +349,9 @@ export default function ScanScreen() {
       )}
       <View style={styles.container}>
         <Text style={styles.text}>
-          {patente ? `Patente asignada: ${patente}` : "No hay patente asignada..."}
+          {patente
+            ? `Patente asignada: ${patente}`
+            : "No hay patente asignada..."}
         </Text>
         {/* Botones de escaneo y confirmación */}
         <View style={styles.buttonRow}>
@@ -456,6 +483,69 @@ export default function ScanScreen() {
             </View>
           </View>
         </Modal>
+        {/* Modal selección de producto cuando hay múltiples coincidencias */}
+        <Modal
+          visible={selectModal}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setSelectModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text
+                style={{ fontWeight: "bold", fontSize: 18, marginBottom: 12 }}
+              >
+                Seleccionar producto a escanear
+              </Text>
+
+              {selectLoading ? (
+                <ActivityIndicator size="large" color="#2196F3" />
+              ) : (
+                <FlatList
+                  data={selectResults}
+                  keyExtractor={(p) => p.id.toString()}
+                  ItemSeparatorComponent={() => (
+                    <View style={styles.separator} />
+                  )}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.selectItem}
+                      onPress={async () => {
+                        try {
+                          setSelectLoading(true);
+                          await verifyProduct(item);
+                          setSelectModal(false);
+                        } finally {
+                          setSelectLoading(false);
+                        }
+                      }}
+                    >
+                      <Text style={{ fontWeight: "bold" }}>
+                        Folio: {item.code} : {item.name}
+                      </Text>
+                      <Text>Patente: {item.patent || "—"} • Cantidad: {item.stock || "—"}</Text>
+                      {/* agrega más campos si los tienes (address, etc.) */}
+                    </TouchableOpacity>
+                  )}
+                />
+              )}
+
+              <TouchableOpacity
+                style={[
+                  styles.manualSendButton,
+                  { marginTop: 12, backgroundColor: "#ddd" },
+                ]}
+                onPress={() => setSelectModal(false)}
+                disabled={selectLoading}
+              >
+                <Text style={{ color: "#333", fontWeight: "bold" }}>
+                  Cancelar
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
         {loading ? (
           <ActivityIndicator size="large" color="#2196F3" />
         ) : filtered.length === 0 ? (
@@ -642,5 +732,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     alignItems: "center",
     marginHorizontal: 2,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: "#E5E7EB",
+    marginVertical: 8,
+  },
+  selectItem: {
+    paddingVertical: 10,
   },
 });
