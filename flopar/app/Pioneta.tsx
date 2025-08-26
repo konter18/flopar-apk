@@ -403,7 +403,7 @@ export default function ScanScreen() {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <Text
-                style={{ fontWeight: "bold", fontSize: 18, marginBottom: 12 }}
+                style={{ fontWeight: "bold", fontSize: 18, marginBottom: 12, color: "#333" }}
               >
                 Ingresar código manualmente
               </Text>
