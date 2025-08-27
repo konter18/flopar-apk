@@ -5,7 +5,7 @@
     "owner": "konter18", 
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/camion.png",
+    "icon": "./assets/images/logo.jpg",
     "scheme": "flopar",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -16,7 +16,7 @@
     "android": {
       "package": "com.flopar.transportes",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/adaptative-icon.jpg",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true
