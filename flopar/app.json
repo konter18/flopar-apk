@@ -1,20 +1,20 @@
 {
   "expo": {
-    "name": "flopar",
-    "slug": "flopar",
+    "name": "Saltrak",
+    "slug": "saltrak",
     "owner": "konter18", 
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.jpg",
-    "scheme": "flopar",
+    "scheme": "saltrak",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.flopar.transportes"
+      "bundleIdentifier": "cl.saltrak.transportes"
     },
     "android": {
-      "package": "com.flopar.transportes",
+      "package": "cl.saltrak.transportes",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptative-icon.jpg",
         "backgroundColor": "#ffffff"
