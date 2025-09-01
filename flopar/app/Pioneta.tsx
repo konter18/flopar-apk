@@ -1,7 +1,13 @@
 import React, { useCallback, useState } from "react";
 import {
-  View, Text, StyleSheet, FlatList, ActivityIndicator,
-  Alert, TouchableOpacity, TextInput
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  ActivityIndicator,
+  Alert,
+  TouchableOpacity,
+  TextInput,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -16,8 +22,14 @@ import AppModal from "./components/AppModal";
 import AppModalCard from "./components/AppModalCard";
 
 interface Product {
-  id: number; name: string; code: string; patent: string;
-  status_p: string; location: string; address: string; stock: number;
+  id: number;
+  name: string;
+  code: string;
+  patent: string;
+  status_p: string;
+  location: string;
+  address: string;
+  stock: number;
 }
 
 type ProductCardProps = { item: Product };
@@ -31,7 +43,9 @@ const ProductCard = React.memo(
         <Text>Patente: {item.patent}</Text>
         <Text>
           Estado:{" "}
-          <Text style={{ color: item.status_p === "Verificado" ? "green" : "red" }}>
+          <Text
+            style={{ color: item.status_p === "Verificado" ? "green" : "red" }}
+          >
             {item.status_p}
           </Text>
         </Text>
@@ -82,15 +96,26 @@ export default function ScanScreen() {
 
   // verificar producto
   async function verifyProduct(product: Product) {
+    if ((product.status_p || "").toLowerCase() === "verificado") {
+      Alert.alert("Producto ya verificado", `Folio: ${product.code}`);
+      return;
+    }
+
     const userDataString = await AsyncStorage.getItem("userData");
     if (!userDataString) throw new Error("No hay usuario autenticado");
     const userData = JSON.parse(userDataString);
     const userId = userData.user_id;
 
     if (userData.role === "pioneta") {
-      if (!product.patent || !userData.patent || product.patent !== userData.patent) {
-        Alert.alert("Patente no autorizada",
-          `Este producto pertenece a la patente ${product.patent}, no puedes escanearlo`);
+      if (
+        !product.patent ||
+        !userData.patent ||
+        product.patent !== userData.patent
+      ) {
+        Alert.alert(
+          "Patente no autorizada",
+          `Este producto pertenece a la patente ${product.patent}, no puedes escanearlo`
+        );
         return;
       }
     }
@@ -104,7 +129,6 @@ export default function ScanScreen() {
     await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
     await api.post(ENDPOINTS.SCAN_PRODUCT(product.id), {});
 
-    // 🔵 MODAL de éxito (en lugar de Alert.alert)
     setSuccessMsg(`Producto: ${product.name}\nCódigo: ${product.code}`);
     setSuccessOpen(true);
 
@@ -135,7 +159,11 @@ export default function ScanScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { fetchProductos(); }, [fetchProductos]));
+  useFocusEffect(
+    useCallback(() => {
+      fetchProductos();
+    }, [fetchProductos])
+  );
 
   const fetchAdminPhone = async () => {
     try {
@@ -157,9 +185,12 @@ export default function ScanScreen() {
     if (text.trim() === "") setFiltered(products);
     else {
       const s = text.toLowerCase();
-      setFiltered(products.filter(p =>
-        p.name.toLowerCase().includes(s) || p.code.toLowerCase().includes(s)
-      ));
+      setFiltered(
+        products.filter(
+          (p) =>
+            p.name.toLowerCase().includes(s) || p.code.toLowerCase().includes(s)
+        )
+      );
     }
   };
 
@@ -167,7 +198,8 @@ export default function ScanScreen() {
     err?.response?.data?.detail ||
     err?.response?.data?.message ||
     (typeof err?.response?.data === "string" ? err.response.data : null) ||
-    err?.message || "Error desconocido";
+    err?.message ||
+    "Error desconocido";
 
   const normalizePhone = (raw: string) =>
     ("+" + String(raw).replace(/[^\d+]/g, "")).replace(/\+{2,}/, "+");
@@ -197,7 +229,9 @@ export default function ScanScreen() {
         const to = normalizePhone(adminPhone);
         try {
           const { data } = await api.post(ENDPOINTS.SEND_WHATSAPP, {
-            to, patente: userPatente, usuario,
+            to,
+            patente: userPatente,
+            usuario,
           });
           if (data?.sid) console.log("Twilio message SID:", data.sid);
         } catch (err: any) {
@@ -209,21 +243,34 @@ export default function ScanScreen() {
           return;
         }
       } else {
-        Alert.alert("Cuadratura confirmada",
-          "No se encontró número de teléfono del administrador para enviar mensaje.");
+        Alert.alert(
+          "Cuadratura confirmada",
+          "No se encontró número de teléfono del administrador para enviar mensaje."
+        );
         return;
       }
 
-      Alert.alert("¡Cuadratura confirmada!",
-        "Todos los productos están verificados y se ha enviado el mensaje de confirmación.");
+      Alert.alert(
+        "¡Cuadratura confirmada!",
+        "Todos los productos están verificados y se ha enviado el mensaje de confirmación."
+      );
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
       let mensaje = "Aún tienes productos pendientes por verificar.";
 
-      if (detail && typeof detail === "object" && Array.isArray(detail.pending_products)) {
-        const pendientes = detail.pending_products.map((p: any) => `${p.code}`).join(", ");
+      if (
+        detail &&
+        typeof detail === "object" &&
+        Array.isArray(detail.pending_products)
+      ) {
+        const pendientes = detail.pending_products
+          .map((p: any) => `${p.code}`)
+          .join(", ");
         mensaje = `Productos pendientes de verificación:\n${pendientes}`;
-      } else if (typeof detail === "string" && detail.includes("verificación")) {
+      } else if (
+        typeof detail === "string" &&
+        detail.includes("verificación")
+      ) {
         mensaje = detail;
       }
       Alert.alert("No puedes confirmar aún", mensaje);
@@ -239,22 +286,44 @@ export default function ScanScreen() {
         Alert.alert("Código vacío", "Ingresa el código del producto");
         return;
       }
+
       const { data: batchId } = await api.get(ENDPOINTS.LAST_BATCH);
       const res = await api.get(ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId));
       const resultados: Product[] = res.data ?? [];
 
       if (resultados.length === 0) {
-        Alert.alert("Producto no encontrado", `No existe producto con código: ${code}`);
+        Alert.alert(
+          "Producto no encontrado",
+          `No existe producto con código: ${code}`
+        );
         return;
       }
-      if (resultados.length === 1) {
-        await verifyProduct(resultados[0]);
+
+      // 🔎 dejar SOLO pendientes (no verificados)
+      const pendientes = resultados.filter(
+        (p) => (p.status_p || "").toLowerCase() !== "verificado"
+      );
+
+      if (pendientes.length === 0) {
+        Alert.alert(
+          "Ya verificado",
+          "El/los producto(s) encontrado(s) ya fueron verificados."
+        );
         return;
       }
-      setSelectResults(resultados);
+
+      if (pendientes.length === 1) {
+        await verifyProduct(pendientes[0]);
+        return;
+      }
+
+      setSelectResults(pendientes);
       setSelectModal(true);
     } catch (err: any) {
-      Alert.alert("Error", err?.response?.data?.detail || "No se pudo verificar el producto");
+      Alert.alert(
+        "Error",
+        err?.response?.data?.detail || "No se pudo verificar el producto"
+      );
     } finally {
       setManualLoading(false);
     }
@@ -280,7 +349,11 @@ export default function ScanScreen() {
       <CustomHeader title="Pioneta" onAvatarPress={() => setShowMenu(true)} />
 
       {showMenu && (
-        <TouchableOpacity style={styles.menuOverlay} onPress={() => setShowMenu(false)} activeOpacity={1}>
+        <TouchableOpacity
+          style={styles.menuOverlay}
+          onPress={() => setShowMenu(false)}
+          activeOpacity={1}
+        >
           <View style={styles.dropdownMenu}>
             <TouchableOpacity onPress={handleLogout} style={styles.menuItem}>
               <MaterialIcons name="logout" size={20} color="#333" />
@@ -291,14 +364,24 @@ export default function ScanScreen() {
       )}
 
       <View style={styles.container}>
-        <Text style={styles.text}>{patente ? `Patente asignada: ${patente}` : "No hay patente asignada..."}</Text>
+        <Text style={styles.text}>
+          {patente
+            ? `Patente asignada: ${patente}`
+            : "No hay patente asignada..."}
+        </Text>
 
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.scanButton} onPress={() => router.push("/ScanProduct")}>
+          <TouchableOpacity
+            style={styles.scanButton}
+            onPress={() => router.push("/ScanProduct")}
+          >
             <Text style={styles.scanButtonText}>Escanear producto</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.confirmButton, confirmado && { backgroundColor: "#ccc" }]}
+            style={[
+              styles.confirmButton,
+              confirmado && { backgroundColor: "#ccc" },
+            ]}
             onPress={!confirmado ? handleConfirmQuadrature : undefined}
             activeOpacity={confirmado ? 1 : 0.7}
           >
@@ -316,15 +399,28 @@ export default function ScanScreen() {
             onChangeText={handleSearch}
             returnKeyType="search"
           />
-          <TouchableOpacity style={styles.manualButton} onPress={() => setManualModal(true)}>
+          <TouchableOpacity
+            style={styles.manualButton}
+            onPress={() => setManualModal(true)}
+          >
             <MaterialIcons name="edit" size={22} color="#2196F3" />
             <Text style={styles.manualButtonText}>Escaneo manual</Text>
           </TouchableOpacity>
         </View>
 
         {/* ---- MODAL MANUAL (contenedor reutilizable) ---- */}
-        <AppModalCard visible={manualModal} onRequestClose={() => setManualModal(false)}>
-          <Text style={{ fontWeight: "bold", fontSize: 18, marginBottom: 12, color: "#333" }}>
+        <AppModalCard
+          visible={manualModal}
+          onRequestClose={() => setManualModal(false)}
+        >
+          <Text
+            style={{
+              fontWeight: "bold",
+              fontSize: 18,
+              marginBottom: 12,
+              color: "#333",
+            }}
+          >
             Ingresar código manualmente
           </Text>
           <TextInput
@@ -336,7 +432,11 @@ export default function ScanScreen() {
             autoFocus
           />
           <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
-            <TouchableOpacity style={styles.manualSendButton} onPress={handleManualScan} disabled={manualLoading}>
+            <TouchableOpacity
+              style={styles.manualSendButton}
+              onPress={handleManualScan}
+              disabled={manualLoading}
+            >
               <Text style={{ color: "#fff", fontWeight: "bold" }}>
                 {manualLoading ? "Verificando..." : "Verificar"}
               </Text>
@@ -346,18 +446,27 @@ export default function ScanScreen() {
               onPress={() => setManualModal(false)}
               disabled={manualLoading}
             >
-              <Text style={{ color: "#333", fontWeight: "bold" }}>Cancelar</Text>
+              <Text style={{ color: "#333", fontWeight: "bold" }}>
+                Cancelar
+              </Text>
             </TouchableOpacity>
           </View>
         </AppModalCard>
 
         {/* ---- MODAL DETALLE ---- */}
-        <AppModalCard visible={detailModal} onRequestClose={() => setDetailModal(false)}>
+        <AppModalCard
+          visible={detailModal}
+          onRequestClose={() => setDetailModal(false)}
+        >
           {loadingDetail ? (
             <ActivityIndicator size="large" color="#2196F3" />
           ) : productDetail ? (
             <>
-              <Text style={{ fontWeight: "bold", fontSize: 18, marginBottom: 8 }}>Detalle del Producto</Text>
+              <Text
+                style={{ fontWeight: "bold", fontSize: 18, marginBottom: 8 }}
+              >
+                Detalle del Producto
+              </Text>
               <Text>Código: {productDetail.code}</Text>
               <Text>Nombre: {productDetail.name}</Text>
               <Text>Dirección: {productDetail.address}</Text>
@@ -365,8 +474,13 @@ export default function ScanScreen() {
               <Text>Teléfono: {productDetail.phone_client}</Text>
               <Text>Estado: {productDetail.status_p}</Text>
               <Text>Patente: {productDetail.patent}</Text>
-              <TouchableOpacity style={[styles.manualSendButton, { marginTop: 12 }]} onPress={() => setDetailModal(false)}>
-                <Text style={{ color: "#fff", fontWeight: "bold" }}>Cerrar</Text>
+              <TouchableOpacity
+                style={[styles.manualSendButton, { marginTop: 12 }]}
+                onPress={() => setDetailModal(false)}
+              >
+                <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                  Cerrar
+                </Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -375,7 +489,10 @@ export default function ScanScreen() {
         </AppModalCard>
 
         {/* ---- MODAL SELECCIÓN ---- */}
-        <AppModalCard visible={selectModal} onRequestClose={() => setSelectModal(false)}>
+        <AppModalCard
+          visible={selectModal}
+          onRequestClose={() => setSelectModal(false)}
+        >
           <Text style={{ fontWeight: "bold", fontSize: 18, marginBottom: 12 }}>
             Seleccionar producto a escanear
           </Text>
@@ -399,14 +516,29 @@ export default function ScanScreen() {
                     }
                   }}
                 >
-                  <Text style={{ fontWeight: "bold" }}>Folio: {item.code} : {item.name}</Text>
-                  <Text>Patente: {item.patent || "—"} • Cantidad: {item.stock || "—"}</Text>
+                  <Text style={{ fontWeight: "bold" }}>
+                    Folio: {item.code} — {item.name}
+                  </Text>
+                  <Text>Patente: {item.patent || "—"}</Text>
+                  <Text>
+                    Estado:{" "}
+                    <Text
+                      style={{
+                        color: item.status_p === "Verificado" ? "green" : "red",
+                      }}
+                    >
+                      {item.status_p}
+                    </Text>
+                  </Text>
                 </TouchableOpacity>
               )}
             />
           )}
           <TouchableOpacity
-            style={[styles.manualSendButton, { marginTop: 12, backgroundColor: "#ddd" }]}
+            style={[
+              styles.manualSendButton,
+              { marginTop: 12, backgroundColor: "#ddd" },
+            ]}
             onPress={() => setSelectModal(false)}
             disabled={selectLoading}
           >
@@ -424,7 +556,9 @@ export default function ScanScreen() {
             data={filtered}
             keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={{ paddingTop: 10, paddingBottom: 30 }}
-            renderItem={({ item }) => <ProductCard item={item} onPress={handleOpenDetail} />}
+            renderItem={({ item }) => (
+              <ProductCard item={item} onPress={handleOpenDetail} />
+            )}
             initialNumToRender={10}
             windowSize={7}
             removeClippedSubviews
@@ -452,59 +586,142 @@ export default function ScanScreen() {
 const ACTION_HEIGHT = 54;
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 15 },
-  text: { fontSize: 18, fontWeight: "500", marginBottom: 10, textAlign: "center" },
-  card: { backgroundColor: "#f5f5f5", padding: 15, borderRadius: 8, marginBottom: 10 },
+  text: {
+    fontSize: 18,
+    fontWeight: "500",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  card: {
+    backgroundColor: "#f5f5f5",
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
   productName: { fontWeight: "bold", fontSize: 16 },
 
   // menú
   menuOverlay: {
-    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.1)", zIndex: 999,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.1)",
+    zIndex: 999,
   },
   dropdownMenu: {
-    position: "absolute", top: 55, right: 16, backgroundColor: "#fff",
-    borderRadius: 8, paddingVertical: 8, paddingHorizontal: 16,
-    elevation: 6, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 6,
-    shadowOffset: { width: 0, height: 4 }, minWidth: 120,
+    position: "absolute",
+    top: 55,
+    right: 16,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    minWidth: 120,
   },
   menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 10 },
   menuText: { fontSize: 16, marginLeft: 8, color: "#333" },
 
   // actions & search
-  buttonRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 15, gap: 10 },
+  buttonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 15,
+    gap: 10,
+  },
   scanButton: {
-    backgroundColor: "#2196F3", height: ACTION_HEIGHT, borderRadius: 10,
-    alignItems: "center", justifyContent: "center", minWidth: 170,
-    marginRight: 10, flexDirection: "row", flex: 1,
+    backgroundColor: "#2196F3",
+    height: ACTION_HEIGHT,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 170,
+    marginRight: 10,
+    flexDirection: "row",
+    flex: 1,
   },
   scanButtonText: { color: "#fff", fontWeight: "bold", fontSize: 18 },
   confirmButton: {
-    backgroundColor: "#24c96b", height: ACTION_HEIGHT, borderRadius: 10,
-    alignItems: "center", justifyContent: "center", minWidth: 110,
-    flexDirection: "row", flex: 0.8,
+    backgroundColor: "#24c96b",
+    height: ACTION_HEIGHT,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 110,
+    flexDirection: "row",
+    flex: 0.8,
   },
-  confirmButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16, marginLeft: 5 },
+  confirmButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+    marginLeft: 5,
+  },
 
-  searchRow: { flexDirection: "row", alignItems: "center", marginBottom: 8, gap: 8 },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 8,
+  },
   searchInput: {
-    flex: 1, borderColor: "#bbb", color: "#111827", borderWidth: 1, borderRadius: 8,
-    paddingHorizontal: 12, fontSize: 16, backgroundColor: "#fff", height: ACTION_HEIGHT,
+    flex: 1,
+    borderColor: "#bbb",
+    color: "#111827",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    backgroundColor: "#fff",
+    height: ACTION_HEIGHT,
   },
   manualButton: {
-    flexDirection: "row", alignItems: "center", backgroundColor: "#eaf3fa", borderRadius: 8,
-    marginLeft: 6, borderWidth: 1, borderColor: "#2196F3", paddingHorizontal: 12,
-    height: ACTION_HEIGHT, justifyContent: "center", minWidth: 150,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#eaf3fa",
+    borderRadius: 8,
+    marginLeft: 6,
+    borderWidth: 1,
+    borderColor: "#2196F3",
+    paddingHorizontal: 12,
+    height: ACTION_HEIGHT,
+    justifyContent: "center",
+    minWidth: 150,
   },
-  manualButtonText: { color: "#2196F3", fontWeight: "bold", marginLeft: 5, fontSize: 15 },
+  manualButtonText: {
+    color: "#2196F3",
+    fontWeight: "bold",
+    marginLeft: 5,
+    fontSize: 15,
+  },
 
   // inputs/botones internos de modales
   manualInput: {
-    borderWidth: 1, borderColor: "#bbb", borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8,
-    fontSize: 16, width: "100%", marginBottom: 8, backgroundColor: "#f5f5f5", color: "#000",
+    borderWidth: 1,
+    borderColor: "#bbb",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    fontSize: 16,
+    width: "100%",
+    marginBottom: 8,
+    backgroundColor: "#f5f5f5",
+    color: "#000",
   },
   manualSendButton: {
-    backgroundColor: "#2196F3", borderRadius: 8, paddingVertical: 11, paddingHorizontal: 22,
-    alignItems: "center", marginHorizontal: 2,
+    backgroundColor: "#2196F3",
+    borderRadius: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 22,
+    alignItems: "center",
+    marginHorizontal: 2,
   },
 
   separator: { height: 1, backgroundColor: "#E5E7EB", marginVertical: 8 },

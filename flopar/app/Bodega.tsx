@@ -106,7 +106,6 @@ export default function BodegaScreen() {
   };
 
   async function verifyProductBodega(product: Product) {
-    // 👮‍♂️ guard: ya verificado
     if ((product.status_b || "").toLowerCase() === "verificado") {
       Alert.alert("Producto ya verificado", `Folio: ${product.code}`);
       return;
@@ -206,7 +205,7 @@ export default function BodegaScreen() {
         );
         return;
       }
-
+      
       const pendientes = resultados.filter(
         (p) => (p.status_b || "").toLowerCase() !== "verificado"
       );
