@@ -2,7 +2,7 @@
   "expo": {
     "name": "Saltrak",
     "slug": "saltrak",
-    "owner": "konter18", 
+    "owner": "konter18",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.jpg",
@@ -44,7 +44,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "9bcbca8b-9462-42b6-8267-36937bca5ee3"
+        "projectId": "057483fb-d0db-454f-a7a9-256cc029951a"
       }
     }
   }
