@@ -106,7 +106,6 @@ export default function BodegaScreen() {
   };
 
   async function verifyProductBodega(product: Product) {
-    // 👮‍♂️ guard: ya verificado
     if ((product.status_b || "").toLowerCase() === "verificado") {
       Alert.alert("Producto ya verificado", `Folio: ${product.code}`);
       return;
@@ -206,7 +205,7 @@ export default function BodegaScreen() {
         );
         return;
       }
-
+      
       const pendientes = resultados.filter(
         (p) => (p.status_b || "").toLowerCase() !== "verificado"
       );
@@ -324,7 +323,7 @@ export default function BodegaScreen() {
               fontWeight: "bold",
               fontSize: 18,
               marginBottom: 12,
-              color: "#333",
+              color: "#000",
             }}
           >
             Ingresar código manualmente
@@ -332,6 +331,7 @@ export default function BodegaScreen() {
           <TextInput
             style={styles.manualInput}
             placeholder="Código del producto"
+            placeholderTextColor="#000"
             value={manualCode}
             onChangeText={setManualCode}
             autoCapitalize="none"
