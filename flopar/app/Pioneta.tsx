@@ -426,6 +426,7 @@ export default function ScanScreen() {
           <TextInput
             style={styles.manualInput}
             placeholder="Código del producto"
+            placeholderTextColor="#000"
             value={manualCode}
             onChangeText={setManualCode}
             autoCapitalize="none"
