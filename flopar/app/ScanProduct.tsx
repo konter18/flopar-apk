@@ -2,21 +2,22 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
-  Alert,
   ActivityIndicator,
   StyleSheet,
   TouchableOpacity,
-  Modal,
   FlatList,
 } from "react-native";
-import { Camera, CameraView } from "expo-camera";
+import { CameraView, Camera } from "expo-camera";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import api from "../utils/api";
 import { ENDPOINTS } from "../constants/endpoints";
 
-/** ---- Antifalsos positivos: solo números y longitudes típicas que nos pasaste */
+import AppModal from "./components/AppModal";
+import AppModalCard from "./components/AppModalCard";
+
+/** ---- Antifalsos positivos: solo números y longitudes típicas */
 const ALLOWED_LENGTHS = new Set<number>([12, 13, 14, 15, 18]);
 const isLikelyCode = (raw: string) => {
   const s = (raw || "").trim();
@@ -36,18 +37,27 @@ type Product = {
 export default function ScanProductScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
 
-  /** Estado de escaneo bajo demanda */
-  const [armed, setArmed] = useState(false); // true => escuchar lecturas
-  const [loading, setLoading] = useState(false); // true => haciendo requests
-  const [paused, setPaused] = useState(false); // true => modal abierto / bloqueado por UI
+  // escaneo / estado
+  const [armed, setArmed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [paused, setPaused] = useState(false);
 
-  /** Modal de selección cuando hay múltiples */
+  // selección múltiple
   const [selectVisible, setSelectVisible] = useState(false);
   const [selectResults, setSelectResults] = useState<Product[]>([]);
   const [selectLoading, setSelectLoading] = useState(false);
 
+  // modales de mensaje
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [infoTitle, setInfoTitle] = useState<string>("");
+  const [infoMsg, setInfoMsg] = useState<string>("");
+
+  // modal de éxito
+  const [successOpen, setSuccessOpen] = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
+
   const lastScanTs = useRef(0);
-  const MIN_INTERVAL = 800; // ms entre lecturas
+  const MIN_INTERVAL = 800;
   const cameraRef = useRef<CameraView>(null);
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -59,11 +69,13 @@ export default function ScanProductScreen() {
     })();
   }, []);
 
-  const verifyProduct = async (
-    product: Product,
-    role: Role,
-    userId: number
-  ) => {
+  const openInfo = (title: string, message: string) => {
+    setInfoTitle(title);
+    setInfoMsg(message);
+    setInfoOpen(true);
+  };
+
+  const verifyProduct = async (product: Product, role: Role, userId: number) => {
     const now = new Date().toISOString();
     const patchPayload =
       role === "pioneta"
@@ -75,13 +87,15 @@ export default function ScanProductScreen() {
 
     let msg = `Producto: ${product.name}\nCódigo: ${product.code}`;
     if (role === "bodega") msg += `\nPatente: ${product.patent ?? "—"}`;
-    Alert.alert("¡Producto escaneado!", msg);
 
-    // cerrar flujo y volver
+    // éxito con modal
+    setSuccessMsg(msg);
+    setSuccessOpen(true);
+
+    // bloqueamos el escaneo hasta cerrar
     setArmed(false);
-    setPaused(false);
+    setPaused(true);
     setSelectVisible(false);
-    setTimeout(() => router.back(), 1000);
   };
 
   const processCode = async (code: string) => {
@@ -98,48 +112,38 @@ export default function ScanProductScreen() {
       const results: Product[] = res.data ?? [];
 
       if (results.length === 0) {
-        Alert.alert(
-          "Producto no encontrado",
-          `No existe producto con código: ${code}`
-        );
+        openInfo("Producto no encontrado", `No existe producto con código: ${code}`);
         setArmed(false);
-        setPaused(false);
+        setPaused(true);
         return;
       }
 
-      // 1) Filtro por ROL (pioneta: por patente; bodega: ven todo)
+      // 1) filtro por rol (pioneta por patente)
       const byRole =
         role === "pioneta"
-          ? results.filter(
-              (r) => r.patent && user.patent && r.patent === user.patent
-            )
+          ? results.filter((r) => r.patent && user.patent && r.patent === user.patent)
           : results;
 
       if (byRole.length === 0) {
-        Alert.alert(
-          "Patente no autorizada",
-          "El resultado no corresponde a tu patente."
-        );
+        openInfo("Patente no autorizada", "El resultado no corresponde a tu patente.");
         setArmed(false);
-        setPaused(false);
+        setPaused(true);
         return;
       }
 
-      // 2) Excluir ya verificados según el ROL
+      // 2) excluir ya verificados según el rol
       const notVerified =
         role === "pioneta"
           ? byRole.filter((r: any) => r.status_p !== "Verificado")
           : byRole.filter((r: any) => r.status_b !== "Verificado");
 
       if (notVerified.length === 0) {
-        Alert.alert(
+        openInfo(
           "Sin pendientes",
-          `Todos (${byRole.length}) ya están verificados para ${
-            role === "pioneta" ? "pioneta" : "bodega"
-          }.`
+          `Todos (${byRole.length}) ya están verificados para ${role === "pioneta" ? "pioneta" : "bodega"}.`
         );
         setArmed(false);
-        setPaused(false);
+        setPaused(true);
         return;
       }
 
@@ -148,18 +152,14 @@ export default function ScanProductScreen() {
         return;
       }
 
-      // 3) Múltiples pendientes → abrir modal con SOLO los pendientes
+      // múltiples pendientes → selección
       setSelectResults(notVerified);
       setSelectVisible(true);
       setPaused(true);
     } catch (err: any) {
-      Alert.alert(
-        "Error",
-        err?.response?.data?.detail || "No se pudo verificar el producto"
-      );
-      console.error(err);
+      openInfo("Error", err?.response?.data?.detail || "No se pudo verificar el producto");
       setArmed(false);
-      setPaused(false);
+      setPaused(true);
     } finally {
       setLoading(false);
     }
@@ -173,16 +173,14 @@ export default function ScanProductScreen() {
     lastScanTs.current = now;
 
     const raw = (barcode?.data || barcode?.rawValue || "").trim();
-    if (!isLikelyCode(raw)) return; // filtramos falsos positivos por longitud/números
+    if (!isLikelyCode(raw)) return;
 
-    setPaused(true); // bloqueamos nuevas lecturas mientras procesamos
+    setPaused(true);
     await processCode(raw);
   };
 
-  if (hasPermission === null)
-    return <Text>Solicitando permiso de cámara…</Text>;
-  if (hasPermission === false)
-    return <Text>No se tiene acceso a la cámara</Text>;
+  if (hasPermission === null) return <Text>Solicitando permiso de cámara…</Text>;
+  if (hasPermission === false) return <Text>No se tiene acceso a la cámara</Text>;
 
   return (
     <View style={{ flex: 1 }}>
@@ -191,20 +189,9 @@ export default function ScanProductScreen() {
         style={{ flex: 1 }}
         facing="back"
         barcodeScannerSettings={{
-          barcodeTypes: [
-            "ean13",
-            "ean8",
-            "code128",
-            "code39",
-            "code93",
-            "upc_a",
-            "upc_e",
-          ],
+          barcodeTypes: ["ean13", "ean8", "code128", "code39", "code93", "upc_a", "upc_e"],
         }}
-        // Solo escuchamos cuando el usuario armó el escaneo y no está en pausa
-        onBarcodeScanned={
-          armed && !paused && !loading ? handleBarCodeScanned : undefined
-        }
+        onBarcodeScanned={armed && !paused && !loading ? handleBarCodeScanned : undefined}
       />
 
       {loading && (
@@ -213,102 +200,105 @@ export default function ScanProductScreen() {
         </View>
       )}
 
-      {/* Botón fijo: arma/desarma el escaneo */}
-      <View
-        style={[styles.buttonContainer, { paddingBottom: insets.bottom + 20 }]}
-      >
+      {/* FAB: armar / cancelar */}
+      <View style={[styles.buttonContainer, { paddingBottom: insets.bottom + 20 }]}>
         <TouchableOpacity
-          style={[
-            styles.fab,
-            { backgroundColor: armed && !paused ? "#ef4444" : "#2196F3" },
-          ]}
+          style={[styles.fab, { backgroundColor: armed && !paused ? "#ef4444" : "#2196F3" }]}
           onPress={() => {
-            // Si hay modal abierto, no cambiamos nada
             if (selectVisible) return;
-            // ‘Armar’ reinicia pausa/estado
             setPaused(false);
             setArmed((v) => !v);
           }}
           activeOpacity={0.9}
         >
-          <Text style={styles.fabText}>
-            {armed && !paused ? "CANCELAR" : "ESCANEAR"}
-          </Text>
+          <Text style={styles.fabText}>{armed && !paused ? "CANCELAR" : "ESCANEAR"}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Modal de selección cuando hay múltiples coincidencias */}
-      <Modal
+      {/* ✅ Modal selección (reutilizable) */}
+      <AppModalCard
         visible={selectVisible}
-        transparent
-        animationType="fade"
         onRequestClose={() => {
           setSelectVisible(false);
           setPaused(false);
-          setArmed(false); // que el usuario vuelva a presionar ESCANEAR
+          setArmed(false);
         }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text
-              style={{ fontWeight: "bold", fontSize: 18, marginBottom: 10 }}
-            >
-              Selecciona el producto
-            </Text>
+        <Text style={{ fontWeight: "bold", fontSize: 18, marginBottom: 10 }}>
+          Selecciona el producto
+        </Text>
 
-            {selectLoading ? (
-              <ActivityIndicator size="large" color="#2196F3" />
-            ) : (
-              <FlatList
-                data={selectResults}
-                keyExtractor={(p) => p.id.toString()}
-                ItemSeparatorComponent={() => <View style={styles.separator} />}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.selectItem}
-                    onPress={async () => {
-                      try {
-                        setSelectLoading(true);
-                        const user = JSON.parse(
-                          (await AsyncStorage.getItem("userData")) || "{}"
-                        );
-                        await verifyProduct(
-                          item,
-                          user.role as Role,
-                          user.user_id
-                        );
-                      } finally {
-                        setSelectLoading(false);
-                      }
-                    }}
-                  >
-                    <Text style={{ fontWeight: "bold" }}>
-                      Código: {item.code} — {item.name}
-                    </Text>
-                    {!!item.patent && <Text>Patente: {item.patent}</Text>}
-                  </TouchableOpacity>
-                )}
-              />
+        {selectLoading ? (
+          <ActivityIndicator size="large" color="#2196F3" />
+        ) : (
+          <FlatList
+            data={selectResults}
+            keyExtractor={(p) => p.id.toString()}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.selectItem}
+                onPress={async () => {
+                  try {
+                    setSelectLoading(true);
+                    const user = JSON.parse((await AsyncStorage.getItem("userData")) || "{}");
+                    await verifyProduct(item, user.role as Role, user.user_id);
+                  } finally {
+                    setSelectLoading(false);
+                  }
+                }}
+              >
+                <Text style={{ fontWeight: "bold" }}>
+                  Código: {item.code} — {item.name}
+                </Text>
+                {!!item.patent && <Text>Patente: {item.patent}</Text>}
+              </TouchableOpacity>
             )}
+          />
+        )}
 
-            <TouchableOpacity
-              style={[
-                styles.fabSmall,
-                { backgroundColor: "#ddd", marginTop: 12 },
-              ]}
-              onPress={() => {
-                setSelectVisible(false);
-                setPaused(false);
-                setArmed(false); // que el usuario decida cuándo volver a armar
-              }}
-            >
-              <Text style={{ color: "#333", fontWeight: "bold" }}>
-                Cancelar
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+        <TouchableOpacity
+          style={[styles.fabSmall, { backgroundColor: "#ddd", marginTop: 12 }]}
+          onPress={() => {
+            setSelectVisible(false);
+            setPaused(false);
+            setArmed(false);
+          }}
+        >
+          <Text style={{ color: "#333", fontWeight: "bold" }}>Cancelar</Text>
+        </TouchableOpacity>
+      </AppModalCard>
+
+      {/*Mensajes informativos */}
+      <AppModal
+        visible={infoOpen}
+        title={infoTitle}
+        message={infoMsg}
+        onClose={() => {
+          setInfoOpen(false);
+          setPaused(false);
+        }}
+        iconName="info"
+        accentColor="#2196F3"
+        backgroundColor="#fff"
+        textColor="#1f2937"
+      />
+
+      {/* ✅Éxito: vuelve atrás al cerrar */}
+      <AppModal
+        visible={successOpen}
+        title="¡Producto escaneado!"
+        message={successMsg}
+        onClose={() => {
+          setSuccessOpen(false);
+          setPaused(false);
+          setTimeout(() => router.back(), 150);
+        }}
+        iconName="check-circle"
+        accentColor="#24c96b"
+        backgroundColor="#fff"
+        textColor="#1f2937"
+      />
     </View>
   );
 }
@@ -343,13 +333,6 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
   },
   fabText: { color: "#fff", fontWeight: "bold", fontSize: 18 },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.28)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 18,
-  },
   fabSmall: {
     borderRadius: 8,
     paddingVertical: 11,
@@ -362,14 +345,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.15,
     shadowRadius: 2,
-  },
-  modalContent: {
-    backgroundColor: "#fff",
-    padding: 22,
-    borderRadius: 12,
-    width: "100%",
-    maxHeight: "70%",
-    elevation: 8,
   },
   separator: { height: 1, backgroundColor: "#E5E7EB", marginVertical: 8 },
   selectItem: { paddingVertical: 10 },
