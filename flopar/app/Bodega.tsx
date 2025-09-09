@@ -16,7 +16,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialIcons } from "@expo/vector-icons";
 import api from "../utils/api";
 
-// ✅ modales reutilizables
+//modales reutilizables
 import AppModal from "./components/AppModal";
 import AppModalCard from "./components/AppModalCard";
 
@@ -178,7 +178,7 @@ export default function BodegaScreen() {
     showFeedback(
       "success",
       "¡Producto verificado!",
-      `Producto: ${product.name}\nCódigo: ${product.code}`
+      `Producto: ${product.name}\nCódigo1: ${product.code}\nCódigo2: ${product.code_lpn}`
     );
 
     setManualModal(false);

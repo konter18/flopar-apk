@@ -11,6 +11,7 @@ import { CameraView, Camera } from "expo-camera";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { MaterialIcons } from "@expo/vector-icons";
 import api from "../utils/api";
 import { ENDPOINTS } from "../constants/endpoints";
 
@@ -29,6 +30,7 @@ type Product = {
   id: number;
   name: string;
   code: string;
+  code_lpn:string;
   patent?: string;
   status_p?: string;
   status_b?: string;
@@ -53,6 +55,7 @@ export default function ScanProductScreen() {
   const [selectVisible, setSelectVisible] = useState(false);
   const [selectResults, setSelectResults] = useState<Product[]>([]);
   const [selectLoading, setSelectLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   // ✅ feedback unificado (mismo que Bodega)
   const [feedback, setFeedback] = useState<{
@@ -109,10 +112,12 @@ export default function ScanProductScreen() {
     }));
   };
 
-  const verifyProduct = async (
+  /** Verifica un producto (silencioso opcional para lotes) */
+  const verifyOne = async (
     product: Product,
     role: Role,
-    userId: number
+    userId: number,
+    silent = false
   ) => {
     const now = new Date().toISOString();
     const patchPayload =
@@ -123,16 +128,14 @@ export default function ScanProductScreen() {
     await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
     await api.post(ENDPOINTS.SCAN_PRODUCT(product.id), {});
 
-    let msg = `Producto: ${product.name}\nCódigo: ${product.code}`;
-    if (role === "bodega") msg += `\nPatente: ${product.patent ?? "—"}`;
-
-    // éxito con modal
-    showFeedback("success", "¡Producto Escaneado!", msg);
-
-    // bloqueamos el escaneo hasta cerrar
-    setArmed(false);
-    setPaused(true);
-    setSelectVisible(false);
+    if (!silent) {
+      let msg = `Producto: ${product.name}\nCódigo 1: ${product.code} \nCódigo 2: ${product.code_lpn}`;
+      if (role === "bodega") msg += `\nPatente: ${product.patent ?? "—"}`;
+      showFeedback("success", "¡Producto Escaneado!", msg);
+      setArmed(false);
+      setPaused(true);
+      setSelectVisible(false);
+    }
   };
 
   const processCode = async (code: string) => {
@@ -198,10 +201,13 @@ export default function ScanProductScreen() {
       }
 
       if (notVerified.length === 1) {
-        await verifyProduct(notVerified[0], role, userId);
+        await verifyOne(notVerified[0], role, userId, false);
         return;
       }
+
+      // múltiples → selección múltiple
       setSelectResults(notVerified);
+      setSelectedIds(new Set()); // limpiar
       setSelectVisible(true);
       setPaused(true);
     } catch (err: any) {
@@ -231,6 +237,77 @@ export default function ScanProductScreen() {
     await processCode(raw);
   };
 
+  // --- selección múltiple helpers ---
+  const toggleId = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const selectAll = () =>
+    setSelectedIds(new Set(selectResults.map((p) => p.id)));
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const verifySelected = async () => {
+    if (selectedIds.size === 0) {
+      showFeedback("warning", "Nada seleccionado", "Selecciona al menos un producto.");
+      return;
+    }
+    setSelectLoading(true);
+    try {
+      const user = JSON.parse((await AsyncStorage.getItem("userData")) || "{}");
+      const role: Role = user.role;
+      const userId: number = user.user_id;
+
+      let ok = 0;
+      let fails: { code: string; reason: string }[] = [];
+
+      // procesa en serie para no saturar
+      for (const p of selectResults) {
+        if (!selectedIds.has(p.id)) continue;
+        try {
+          await verifyOne(p, role, userId, true);
+          ok++;
+        } catch (e: any) {
+          fails.push({
+            code: p.code,
+            reason:
+              e?.response?.data?.detail ||
+              e?.message ||
+              "Error desconocido",
+          });
+        }
+      }
+
+      setSelectVisible(false);
+      setSelectedIds(new Set());
+      setPaused(false);
+      setArmed(false);
+
+      if (fails.length === 0) {
+        showFeedback(
+          "success",
+          "¡Productos verificados!",
+          `Se verificaron ${ok} producto(s) correctamente.`
+        );
+      } else {
+        const list = fails
+          .slice(0, 5)
+          .map((f) => `• ${f.code}: ${f.reason}`)
+          .join("\n");
+        const extra = fails.length > 5 ? `\n… y ${fails.length - 5} más.` : "";
+        showFeedback(
+          ok > 0 ? "warning" : "error",
+          ok > 0 ? "Verificación parcial" : "No se pudieron verificar",
+          `Éxitos: ${ok}\nFallos: ${fails.length}\n${list}${extra}`
+        );
+      }
+    } finally {
+      setSelectLoading(false);
+    }
+  };
+
   if (hasPermission === null)
     return <Text>Solicitando permiso de cámara…</Text>;
   if (hasPermission === false)
@@ -243,19 +320,9 @@ export default function ScanProductScreen() {
         style={{ flex: 1 }}
         facing="back"
         barcodeScannerSettings={{
-          barcodeTypes: [
-            "ean13",
-            "ean8",
-            "code128",
-            "code39",
-            "code93",
-            "upc_a",
-            "upc_e",
-          ],
+          barcodeTypes: ["ean13", "ean8", "code128", "code39", "code93", "upc_a", "upc_e"],
         }}
-        onBarcodeScanned={
-          armed && !paused && !loading ? handleBarCodeScanned : undefined
-        }
+        onBarcodeScanned={armed && !paused && !loading ? handleBarCodeScanned : undefined}
       />
 
       {loading && (
@@ -265,14 +332,9 @@ export default function ScanProductScreen() {
       )}
 
       {/* FAB: armar / cancelar */}
-      <View
-        style={[styles.buttonContainer, { paddingBottom: insets.bottom + 20 }]}
-      >
+      <View style={[styles.buttonContainer, { paddingBottom: insets.bottom + 20 }]}>
         <TouchableOpacity
-          style={[
-            styles.fab,
-            { backgroundColor: armed && !paused ? "#ef4444" : "#2196F3" },
-          ]}
+          style={[styles.fab, { backgroundColor: armed && !paused ? "#ef4444" : "#2196F3" }]}
           onPress={() => {
             if (selectVisible) return;
             setPaused(false);
@@ -280,13 +342,11 @@ export default function ScanProductScreen() {
           }}
           activeOpacity={0.9}
         >
-          <Text style={styles.fabText}>
-            {armed && !paused ? "CANCELAR" : "ESCANEAR"}
-          </Text>
+          <Text style={styles.fabText}>{armed && !paused ? "CANCELAR" : "ESCANEAR"}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* ✅ Modal selección (reutilizable) */}
+      {/* ✅ Modal selección múltiple */}
       <AppModalCard
         visible={selectVisible}
         onRequestClose={() => {
@@ -296,38 +356,60 @@ export default function ScanProductScreen() {
         }}
       >
         <Text style={{ fontWeight: "bold", fontSize: 18, marginBottom: 10 }}>
-          Selecciona el producto
+          Selecciona los productos
         </Text>
 
         {selectLoading ? (
           <ActivityIndicator size="large" color="#2196F3" />
         ) : (
-          <FlatList
-            data={selectResults}
-            keyExtractor={(p) => p.id.toString()}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.selectItem}
-                onPress={async () => {
-                  try {
-                    setSelectLoading(true);
-                    const user = JSON.parse(
-                      (await AsyncStorage.getItem("userData")) || "{}"
-                    );
-                    await verifyProduct(item, user.role as Role, user.user_id);
-                  } finally {
-                    setSelectLoading(false);
-                  }
-                }}
-              >
-                <Text style={{ fontWeight: "bold" }}>
-                  Código: {item.code} — {item.name}
-                </Text>
-                {!!item.patent && <Text>Patente: {item.patent}</Text>}
+          <>
+            {/* acciones de selección */}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+              <TouchableOpacity onPress={selectAll} style={styles.pickBtn}>
+                <Text style={styles.pickBtnText}>Seleccionar todos</Text>
               </TouchableOpacity>
-            )}
-          />
+              <TouchableOpacity onPress={clearSelection} style={[styles.pickBtn, { backgroundColor: "#eee" }]}>
+                <Text style={[styles.pickBtnText, { color: "#333" }]}>Limpiar</Text>
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={selectResults}
+              keyExtractor={(p) => p.id.toString()}
+              ItemSeparatorComponent={() => <View className="separator" style={styles.separator} />}
+              renderItem={({ item }) => {
+                const checked = selectedIds.has(item.id);
+                return (
+                  <TouchableOpacity
+                    style={[styles.selectItem, { flexDirection: "row", alignItems: "center", gap: 8 }]}
+                    onPress={() => toggleId(item.id)}
+                  >
+                    <MaterialIcons
+                      name={checked ? "check-box" : "check-box-outline-blank"}
+                      size={22}
+                      color={checked ? "#2196F3" : "#9CA3AF"}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontWeight: "bold" }}>
+                        Código: {item.code} — {item.name}
+                      </Text>
+                      {!!item.patent && <Text>Patente: {item.patent}</Text>}
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+
+            <TouchableOpacity
+              style={[styles.fabSmall, { backgroundColor: selectedIds.size ? "#2196F3" : "#9CA3AF", marginTop: 12 }]}
+              disabled={!selectedIds.size}
+              onPress={verifySelected}
+            >
+              <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                Verificar seleccionados ({selectedIds.size})
+              </Text>
+            </TouchableOpacity>
+          </>
         )}
 
         <TouchableOpacity
@@ -342,8 +424,8 @@ export default function ScanProductScreen() {
         </TouchableOpacity>
       </AppModalCard>
 
-      {/*Mensajes informativos */}
-       <AppModal
+      {/* Mensajes informativos / resultado */}
+      <AppModal
         visible={feedback.open}
         title={feedback.title}
         message={feedback.message}
@@ -405,6 +487,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 2,
   },
+  pickBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: "#eaf3fa",
+    borderWidth: 1,
+    borderColor: "#2196F3",
+  },
+  pickBtnText: { color: "#2196F3", fontWeight: "bold" },
   separator: { height: 1, backgroundColor: "#E5E7EB", marginVertical: 8 },
   selectItem: { paddingVertical: 10 },
 });
