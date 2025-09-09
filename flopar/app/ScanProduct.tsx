@@ -34,6 +34,13 @@ type Product = {
   status_b?: string;
 };
 
+type AppModalIconName =
+  | "check-circle"
+  | "alert-circle"
+  | "close-circle"
+  | "information";
+type FeedbackType = "success" | "warning" | "error" | "info";
+
 export default function ScanProductScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
 
@@ -47,14 +54,26 @@ export default function ScanProductScreen() {
   const [selectResults, setSelectResults] = useState<Product[]>([]);
   const [selectLoading, setSelectLoading] = useState(false);
 
-  // modales de mensaje
-  const [infoOpen, setInfoOpen] = useState(false);
-  const [infoTitle, setInfoTitle] = useState<string>("");
-  const [infoMsg, setInfoMsg] = useState<string>("");
-
-  // modal de éxito
-  const [successOpen, setSuccessOpen] = useState(false);
-  const [successMsg, setSuccessMsg] = useState("");
+  // ✅ feedback unificado (mismo que Bodega)
+  const [feedback, setFeedback] = useState<{
+    open: boolean;
+    type: FeedbackType;
+    title: string;
+    message: string;
+    iconName: AppModalIconName;
+    accentColor: string;
+    backgroundColor: string;
+    textColor: string;
+  }>({
+    open: false,
+    type: "info",
+    title: "",
+    message: "",
+    iconName: "information",
+    accentColor: "#3B82F6",
+    backgroundColor: "#fff",
+    textColor: "#1f2937",
+  });
 
   const lastScanTs = useRef(0);
   const MIN_INTERVAL = 800;
@@ -69,13 +88,32 @@ export default function ScanProductScreen() {
     })();
   }, []);
 
-  const openInfo = (title: string, message: string) => {
-    setInfoTitle(title);
-    setInfoMsg(message);
-    setInfoOpen(true);
+  const showFeedback = (type: FeedbackType, title: string, message: string) => {
+    const map: Record<
+      FeedbackType,
+      { iconName: AppModalIconName; accentColor: string }
+    > = {
+      success: { iconName: "check-circle", accentColor: "#22C55E" },
+      warning: { iconName: "alert-circle", accentColor: "#EF4444" },
+      error: { iconName: "close-circle", accentColor: "#EF4444" },
+      info: { iconName: "information", accentColor: "#3B82F6" },
+    };
+    setFeedback((f) => ({
+      ...f,
+      open: true,
+      type,
+      title,
+      message,
+      iconName: map[type].iconName,
+      accentColor: map[type].accentColor,
+    }));
   };
 
-  const verifyProduct = async (product: Product, role: Role, userId: number) => {
+  const verifyProduct = async (
+    product: Product,
+    role: Role,
+    userId: number
+  ) => {
     const now = new Date().toISOString();
     const patchPayload =
       role === "pioneta"
@@ -89,8 +127,7 @@ export default function ScanProductScreen() {
     if (role === "bodega") msg += `\nPatente: ${product.patent ?? "—"}`;
 
     // éxito con modal
-    setSuccessMsg(msg);
-    setSuccessOpen(true);
+    showFeedback("success", "¡Producto Escaneado!", msg);
 
     // bloqueamos el escaneo hasta cerrar
     setArmed(false);
@@ -112,7 +149,11 @@ export default function ScanProductScreen() {
       const results: Product[] = res.data ?? [];
 
       if (results.length === 0) {
-        openInfo("Producto no encontrado", `No existe producto con código: ${code}`);
+        showFeedback(
+          "error",
+          "Producto no encontrado",
+          `No existe producto con código: ${code}`
+        );
         setArmed(false);
         setPaused(true);
         return;
@@ -121,11 +162,17 @@ export default function ScanProductScreen() {
       // 1) filtro por rol (pioneta por patente)
       const byRole =
         role === "pioneta"
-          ? results.filter((r) => r.patent && user.patent && r.patent === user.patent)
+          ? results.filter(
+              (r) => r.patent && user.patent && r.patent === user.patent
+            )
           : results;
 
       if (byRole.length === 0) {
-        openInfo("Patente no autorizada", "El resultado no corresponde a tu patente.");
+        showFeedback(
+          "warning",
+          "Patente no autorizada",
+          "El resultado no corresponde a tu patente."
+        );
         setArmed(false);
         setPaused(true);
         return;
@@ -138,9 +185,12 @@ export default function ScanProductScreen() {
           : byRole.filter((r: any) => r.status_b !== "Verificado");
 
       if (notVerified.length === 0) {
-        openInfo(
+        showFeedback(
+          "warning",
           "Sin pendientes",
-          `Todos (${byRole.length}) ya están verificados para ${role === "pioneta" ? "pioneta" : "bodega"}.`
+          `El/los ${byRole.length} productos ya fueron escaneados por ${
+            role === "pioneta" ? "pioneta" : "bodega"
+          }.`
         );
         setArmed(false);
         setPaused(true);
@@ -151,13 +201,15 @@ export default function ScanProductScreen() {
         await verifyProduct(notVerified[0], role, userId);
         return;
       }
-
-      // múltiples pendientes → selección
       setSelectResults(notVerified);
       setSelectVisible(true);
       setPaused(true);
     } catch (err: any) {
-      openInfo("Error", err?.response?.data?.detail || "No se pudo verificar el producto");
+      showFeedback(
+        "error",
+        "Error",
+        err?.response?.data?.detail || "No se pudo verificar el producto"
+      );
       setArmed(false);
       setPaused(true);
     } finally {
@@ -179,8 +231,10 @@ export default function ScanProductScreen() {
     await processCode(raw);
   };
 
-  if (hasPermission === null) return <Text>Solicitando permiso de cámara…</Text>;
-  if (hasPermission === false) return <Text>No se tiene acceso a la cámara</Text>;
+  if (hasPermission === null)
+    return <Text>Solicitando permiso de cámara…</Text>;
+  if (hasPermission === false)
+    return <Text>No se tiene acceso a la cámara</Text>;
 
   return (
     <View style={{ flex: 1 }}>
@@ -189,9 +243,19 @@ export default function ScanProductScreen() {
         style={{ flex: 1 }}
         facing="back"
         barcodeScannerSettings={{
-          barcodeTypes: ["ean13", "ean8", "code128", "code39", "code93", "upc_a", "upc_e"],
+          barcodeTypes: [
+            "ean13",
+            "ean8",
+            "code128",
+            "code39",
+            "code93",
+            "upc_a",
+            "upc_e",
+          ],
         }}
-        onBarcodeScanned={armed && !paused && !loading ? handleBarCodeScanned : undefined}
+        onBarcodeScanned={
+          armed && !paused && !loading ? handleBarCodeScanned : undefined
+        }
       />
 
       {loading && (
@@ -201,9 +265,14 @@ export default function ScanProductScreen() {
       )}
 
       {/* FAB: armar / cancelar */}
-      <View style={[styles.buttonContainer, { paddingBottom: insets.bottom + 20 }]}>
+      <View
+        style={[styles.buttonContainer, { paddingBottom: insets.bottom + 20 }]}
+      >
         <TouchableOpacity
-          style={[styles.fab, { backgroundColor: armed && !paused ? "#ef4444" : "#2196F3" }]}
+          style={[
+            styles.fab,
+            { backgroundColor: armed && !paused ? "#ef4444" : "#2196F3" },
+          ]}
           onPress={() => {
             if (selectVisible) return;
             setPaused(false);
@@ -211,7 +280,9 @@ export default function ScanProductScreen() {
           }}
           activeOpacity={0.9}
         >
-          <Text style={styles.fabText}>{armed && !paused ? "CANCELAR" : "ESCANEAR"}</Text>
+          <Text style={styles.fabText}>
+            {armed && !paused ? "CANCELAR" : "ESCANEAR"}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -241,7 +312,9 @@ export default function ScanProductScreen() {
                 onPress={async () => {
                   try {
                     setSelectLoading(true);
-                    const user = JSON.parse((await AsyncStorage.getItem("userData")) || "{}");
+                    const user = JSON.parse(
+                      (await AsyncStorage.getItem("userData")) || "{}"
+                    );
                     await verifyProduct(item, user.role as Role, user.user_id);
                   } finally {
                     setSelectLoading(false);
@@ -270,34 +343,20 @@ export default function ScanProductScreen() {
       </AppModalCard>
 
       {/*Mensajes informativos */}
-      <AppModal
-        visible={infoOpen}
-        title={infoTitle}
-        message={infoMsg}
+       <AppModal
+        visible={feedback.open}
+        title={feedback.title}
+        message={feedback.message}
         onClose={() => {
-          setInfoOpen(false);
+          const wasSuccess = feedback.type === "success";
+          setFeedback((f) => ({ ...f, open: false }));
           setPaused(false);
+          if (wasSuccess) setTimeout(() => router.back(), 150);
         }}
-        iconName="info"
-        accentColor="#2196F3"
-        backgroundColor="#fff"
-        textColor="#1f2937"
-      />
-
-      {/* ✅Éxito: vuelve atrás al cerrar */}
-      <AppModal
-        visible={successOpen}
-        title="¡Producto escaneado!"
-        message={successMsg}
-        onClose={() => {
-          setSuccessOpen(false);
-          setPaused(false);
-          setTimeout(() => router.back(), 150);
-        }}
-        iconName="check-circle"
-        accentColor="#24c96b"
-        backgroundColor="#fff"
-        textColor="#1f2937"
+        iconName={feedback.iconName}
+        accentColor={feedback.accentColor}
+        backgroundColor={feedback.backgroundColor}
+        textColor={feedback.textColor}
       />
     </View>
   );

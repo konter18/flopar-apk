@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   ActivityIndicator,
-  Alert,
   TouchableOpacity,
   TextInput,
 } from "react-native";
@@ -55,6 +54,14 @@ const ProductCard = React.memo(
   )
 );
 
+// ---- tipos para el modal unificado (mismos que en Bodega/Scan) ----
+type FeedbackType = "success" | "warning" | "error" | "info";
+type AppModalIconName =
+  | "check-circle"
+  | "alert-circle"
+  | "close-circle"
+  | "information";
+
 export default function ScanScreen() {
   const [selectModal, setSelectModal] = useState(false);
   const [selectResults, setSelectResults] = useState<Product[]>([]);
@@ -67,12 +74,12 @@ export default function ScanScreen() {
   const [showMenu, setShowMenu] = useState(false);
   const [search, setSearch] = useState("");
 
-  // modal manual
+  // manual
   const [manualModal, setManualModal] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const [manualLoading, setManualLoading] = useState(false);
 
-  // modal detalle
+  // detalle
   const [detailModal, setDetailModal] = useState(false);
   const [productDetail, setProductDetail] = useState<any>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -81,13 +88,51 @@ export default function ScanScreen() {
   const [adminPhone, setAdminPhone] = useState<string | null>(null);
   const [confirmado, setConfirmado] = useState(false);
 
-  // ✅ modal éxito “Producto verificado”
-  const [successOpen, setSuccessOpen] = useState(false);
-  const [successMsg, setSuccessMsg] = useState("");
+  // ✅ feedback unificado
+  const [feedback, setFeedback] = useState<{
+    open: boolean;
+    type: FeedbackType;
+    title: string;
+    message: string;
+    iconName: AppModalIconName;
+    accentColor: string;
+    backgroundColor: string;
+    textColor: string;
+  }>({
+    open: false,
+    type: "info",
+    title: "",
+    message: "",
+    iconName: "information",
+    accentColor: "#3B82F6",
+    backgroundColor: "#fff",
+    textColor: "#1f2937",
+  });
+
+  const showFeedback = (type: FeedbackType, title: string, message: string) => {
+    const map: Record<
+      FeedbackType,
+      { iconName: AppModalIconName; accentColor: string }
+    > = {
+      success: { iconName: "check-circle", accentColor: "#22C55E" },
+      warning: { iconName: "alert-circle", accentColor: "#EF4444" },
+      error: { iconName: "close-circle", accentColor: "#EF4444" },
+      info: { iconName: "information", accentColor: "#3B82F6" },
+    };
+    setFeedback({
+      open: true,
+      type,
+      title,
+      message,
+      iconName: map[type].iconName,
+      accentColor: map[type].accentColor,
+      backgroundColor: "#fff",
+      textColor: "#1f2937",
+    });
+  };
 
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
-
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchProductos();
@@ -97,7 +142,11 @@ export default function ScanScreen() {
   // verificar producto
   async function verifyProduct(product: Product) {
     if ((product.status_p || "").toLowerCase() === "verificado") {
-      Alert.alert("Producto ya verificado", `Folio: ${product.code}`);
+      showFeedback(
+        "warning",
+        "Producto ya verificado",
+        `Folio: ${product.code}`
+      );
       return;
     }
 
@@ -112,7 +161,8 @@ export default function ScanScreen() {
         !userData.patent ||
         product.patent !== userData.patent
       ) {
-        Alert.alert(
+        showFeedback(
+          "warning",
           "Patente no autorizada",
           `Este producto pertenece a la patente ${product.patent}, no puedes escanearlo`
         );
@@ -129,8 +179,11 @@ export default function ScanScreen() {
     await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
     await api.post(ENDPOINTS.SCAN_PRODUCT(product.id), {});
 
-    setSuccessMsg(`Producto: ${product.name}\nCódigo: ${product.code}`);
-    setSuccessOpen(true);
+    showFeedback(
+      "success",
+      "¡Producto verificado!",
+      `Producto: ${product.name}\nCódigo: ${product.code}`
+    );
 
     setManualModal(false);
     setManualCode("");
@@ -153,7 +206,7 @@ export default function ScanScreen() {
       setFiltered(productos);
     } catch (error) {
       console.error(error);
-      Alert.alert("Error", "No se pudieron cargar los productos.");
+      showFeedback("error", "Error", "No se pudieron cargar los productos.");
     } finally {
       setLoading(false);
     }
@@ -217,40 +270,43 @@ export default function ScanScreen() {
       await api.post(ENDPOINTS.CONFIRM_QUADRATURE(userPatente));
       setConfirmado(true);
 
-      let adminPhone: string | null = null;
+      let phone: string | null = null;
       try {
         const { data } = await api.get(ENDPOINTS.GET_ADMIN_PHONE);
-        adminPhone = data?.phone || null;
+        phone = data?.phone || null;
       } catch (e) {
         console.warn("No se pudo obtener el número del administrador:", e);
       }
 
-      if (adminPhone) {
-        const to = normalizePhone(adminPhone);
+      if (phone) {
+        const to = normalizePhone(phone);
         try {
           const { data } = await api.post(ENDPOINTS.SEND_WHATSAPP, {
             to,
             patente: userPatente,
             usuario,
           });
-          if (data?.sid) console.log("Twilio message SID:", data.sid);
+          if (data?.sid) console.log("Twilio SID:", data.sid);
         } catch (err: any) {
           const why = getAxiosError(err);
-          Alert.alert(
+          showFeedback(
+            "warning",
             "Cuadratura confirmada",
             `Se confirmó la cuadratura, pero falló el envío de WhatsApp.\n\nMotivo: ${why}`
           );
           return;
         }
       } else {
-        Alert.alert(
+        showFeedback(
+          "warning",
           "Cuadratura confirmada",
           "No se encontró número de teléfono del administrador para enviar mensaje."
         );
         return;
       }
 
-      Alert.alert(
+      showFeedback(
+        "success",
         "¡Cuadratura confirmada!",
         "Todos los productos están verificados y se ha enviado el mensaje de confirmación."
       );
@@ -273,7 +329,7 @@ export default function ScanScreen() {
       ) {
         mensaje = detail;
       }
-      Alert.alert("No puedes confirmar aún", mensaje);
+      showFeedback("warning", "No puedes confirmar aún", mensaje);
     }
   };
 
@@ -283,7 +339,11 @@ export default function ScanScreen() {
     try {
       const code = manualCode.trim();
       if (!code) {
-        Alert.alert("Código vacío", "Ingresa el código del producto");
+        showFeedback(
+          "warning",
+          "Código vacío",
+          "Ingresa el código del producto"
+        );
         return;
       }
 
@@ -292,22 +352,23 @@ export default function ScanScreen() {
       const resultados: Product[] = res.data ?? [];
 
       if (resultados.length === 0) {
-        Alert.alert(
+        showFeedback(
+          "error",
           "Producto no encontrado",
           `No existe producto con código: ${code}`
         );
         return;
       }
 
-      // 🔎 dejar SOLO pendientes (no verificados)
       const pendientes = resultados.filter(
         (p) => (p.status_p || "").toLowerCase() !== "verificado"
       );
 
       if (pendientes.length === 0) {
-        Alert.alert(
+        showFeedback(
+          "warning",
           "Ya verificado",
-          "El/los producto(s) encontrado(s) ya fueron verificados."
+          "El/los producto(s) ya fueron verificados."
         );
         return;
       }
@@ -320,7 +381,8 @@ export default function ScanScreen() {
       setSelectResults(pendientes);
       setSelectModal(true);
     } catch (err: any) {
-      Alert.alert(
+      showFeedback(
+        "error",
         "Error",
         err?.response?.data?.detail || "No se pudo verificar el producto"
       );
@@ -337,7 +399,11 @@ export default function ScanScreen() {
       const { data } = await api.get(ENDPOINTS.GET_PRODUCT_DETAIL(productId));
       setProductDetail(data);
     } catch (error) {
-      Alert.alert("Error", "No se pudo cargar el detalle del producto");
+      showFeedback(
+        "error",
+        "Error",
+        "No se pudo cargar el detalle del producto"
+      );
       setProductDetail(null);
     } finally {
       setLoadingDetail(false);
@@ -408,7 +474,7 @@ export default function ScanScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ---- MODAL MANUAL (contenedor reutilizable) ---- */}
+        {/* ---- MODAL MANUAL ---- */}
         <AppModalCard
           visible={manualModal}
           onRequestClose={() => setManualModal(false)}
@@ -569,16 +635,16 @@ export default function ScanScreen() {
         )}
       </View>
 
-      {/* ✅ Modal de éxito genérico */}
+      {/* ✅ Modal unificado (info/warning/error/success) */}
       <AppModal
-        visible={successOpen}
-        title="¡Producto verificado!"
-        message={successMsg}
-        onClose={() => setSuccessOpen(false)}
-        iconName="check-circle"
-        accentColor="#24c96b"
-        backgroundColor="#fff"
-        textColor="#1f2937"
+        visible={feedback.open}
+        title={feedback.title}
+        message={feedback.message}
+        onClose={() => setFeedback((f) => ({ ...f, open: false }))}
+        iconName={feedback.iconName}
+        accentColor={feedback.accentColor}
+        backgroundColor={feedback.backgroundColor}
+        textColor={feedback.textColor}
       />
     </View>
   );
@@ -600,8 +666,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   productName: { fontWeight: "bold", fontSize: 16 },
-
-  // menú
   menuOverlay: {
     position: "absolute",
     top: 0,
@@ -628,8 +692,6 @@ const styles = StyleSheet.create({
   },
   menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 10 },
   menuText: { fontSize: 16, marginLeft: 8, color: "#333" },
-
-  // actions & search
   buttonRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -665,7 +727,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginLeft: 5,
   },
-
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -702,8 +763,6 @@ const styles = StyleSheet.create({
     marginLeft: 5,
     fontSize: 15,
   },
-
-  // inputs/botones internos de modales
   manualInput: {
     borderWidth: 1,
     borderColor: "#bbb",
@@ -724,7 +783,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginHorizontal: 2,
   },
-
   separator: { height: 1, backgroundColor: "#E5E7EB", marginVertical: 8 },
   selectItem: { paddingVertical: 10 },
 });
