@@ -84,7 +84,7 @@ export default function LoginScreen() {
       <Text style={styles.title}>Iniciar Sesión</Text>
       <TextInput
         style={styles.input}
-        placeholder="Usuario"
+        placeholder="Nombre de usuario"
         placeholderTextColor="#111827"
         value={username}
         onChangeText={setUsername}

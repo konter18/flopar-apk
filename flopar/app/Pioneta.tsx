@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   ActivityIndicator,
-  Alert,
   TouchableOpacity,
   TextInput,
 } from "react-native";
@@ -14,7 +13,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../utils/api";
 import { ENDPOINTS } from "../constants/endpoints";
 import CustomHeader from "./components/CustomHeader";
-import PullToRefresh from "./components/PullToRefresh";
 import { ROUTES } from "../constants/routes";
 import { MaterialIcons } from "@expo/vector-icons";
 
@@ -25,6 +23,8 @@ interface Product {
   id: number;
   name: string;
   code: string;
+  code_do?: string;
+  code_lpn?: string;
   patent: string;
   status_p: string;
   location: string;
@@ -39,7 +39,8 @@ const ProductCard = React.memo(
     <TouchableOpacity onPress={() => onPress(item.id)} activeOpacity={0.8}>
       <View style={styles.card}>
         <Text style={styles.productName}>Nombre: {item.name}</Text>
-        <Text>Código: {item.code}</Text>
+        <Text>Código 1: {item.code}</Text>
+        <Text>Código 2: {item.code_lpn}</Text>
         <Text>Patente: {item.patent}</Text>
         <Text>
           Estado:{" "}
@@ -55,10 +56,19 @@ const ProductCard = React.memo(
   )
 );
 
+// ---- tipos para el modal unificado ----
+type FeedbackType = "success" | "warning" | "error" | "info";
+type AppModalIconName =
+  | "check-circle"
+  | "alert-circle"
+  | "close-circle"
+  | "information";
+
 export default function ScanScreen() {
   const [selectModal, setSelectModal] = useState(false);
   const [selectResults, setSelectResults] = useState<Product[]>([]);
   const [selectLoading, setSelectLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const [products, setProducts] = useState<Product[]>([]);
   const [filtered, setFiltered] = useState<Product[]>([]);
@@ -67,12 +77,12 @@ export default function ScanScreen() {
   const [showMenu, setShowMenu] = useState(false);
   const [search, setSearch] = useState("");
 
-  // modal manual
+  // manual
   const [manualModal, setManualModal] = useState(false);
   const [manualCode, setManualCode] = useState("");
   const [manualLoading, setManualLoading] = useState(false);
 
-  // modal detalle
+  // detalle
   const [detailModal, setDetailModal] = useState(false);
   const [productDetail, setProductDetail] = useState<any>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -81,13 +91,51 @@ export default function ScanScreen() {
   const [adminPhone, setAdminPhone] = useState<string | null>(null);
   const [confirmado, setConfirmado] = useState(false);
 
-  // ✅ modal éxito “Producto verificado”
-  const [successOpen, setSuccessOpen] = useState(false);
-  const [successMsg, setSuccessMsg] = useState("");
+  // feedback unificado
+  const [feedback, setFeedback] = useState<{
+    open: boolean;
+    type: FeedbackType;
+    title: string;
+    message: string;
+    iconName: AppModalIconName;
+    accentColor: string;
+    backgroundColor: string;
+    textColor: string;
+  }>({
+    open: false,
+    type: "info",
+    title: "",
+    message: "",
+    iconName: "information",
+    accentColor: "#3B82F6",
+    backgroundColor: "#fff",
+    textColor: "#1f2937",
+  });
+
+  const showFeedback = (type: FeedbackType, title: string, message: string) => {
+    const map: Record<
+      FeedbackType,
+      { iconName: AppModalIconName; accentColor: string }
+    > = {
+      success: { iconName: "check-circle", accentColor: "#22C55E" },
+      warning: { iconName: "alert-circle", accentColor: "#EF4444" },
+      error: { iconName: "close-circle", accentColor: "#EF4444" },
+      info: { iconName: "information", accentColor: "#3B82F6" },
+    };
+    setFeedback({
+      open: true,
+      type,
+      title,
+      message,
+      iconName: map[type].iconName,
+      accentColor: map[type].accentColor,
+      backgroundColor: "#fff",
+      textColor: "#1f2937",
+    });
+  };
 
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
-
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchProductos();
@@ -97,7 +145,11 @@ export default function ScanScreen() {
   // verificar producto
   async function verifyProduct(product: Product) {
     if ((product.status_p || "").toLowerCase() === "verificado") {
-      Alert.alert("Producto ya verificado", `Folio: ${product.code}`);
+      showFeedback(
+        "warning",
+        "Producto ya verificado",
+        `Folio: ${product.code}`
+      );
       return;
     }
 
@@ -112,7 +164,8 @@ export default function ScanScreen() {
         !userData.patent ||
         product.patent !== userData.patent
       ) {
-        Alert.alert(
+        showFeedback(
+          "warning",
           "Patente no autorizada",
           `Este producto pertenece a la patente ${product.patent}, no puedes escanearlo`
         );
@@ -129,9 +182,11 @@ export default function ScanScreen() {
     await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
     await api.post(ENDPOINTS.SCAN_PRODUCT(product.id), {});
 
-    setSuccessMsg(`Producto: ${product.name}\nCódigo: ${product.code}`);
-    setSuccessOpen(true);
-
+    showFeedback(
+      "success",
+      "¡Producto verificado!",
+      `Producto: ${product.name}\nCódigo 1: ${product.code}\nCódigo 2: ${product.code_lpn}`
+    );
     setManualModal(false);
     setManualCode("");
     await fetchProductos();
@@ -153,7 +208,7 @@ export default function ScanScreen() {
       setFiltered(productos);
     } catch (error) {
       console.error(error);
-      Alert.alert("Error", "No se pudieron cargar los productos.");
+      showFeedback("error", "Error", "No se pudieron cargar los productos.");
     } finally {
       setLoading(false);
     }
@@ -180,19 +235,33 @@ export default function ScanScreen() {
     router.replace(ROUTES.LOGIN);
   };
 
+  const applyFilters = useCallback((base: Product[], text: string) => {
+    const s = text.toLowerCase().trim();
+    if (!s) return base;
+
+    const norm = (v?: string) => (v || "").toLowerCase();
+
+    return base.filter(
+      (p) =>
+        norm(p.name).includes(s) ||
+        norm(p.code).includes(s) ||
+        norm(p.code_lpn).includes(s) ||
+        norm(p.code_do).includes(s)
+    );
+  }, []);
+
   const handleSearch = (text: string) => {
     setSearch(text);
-    if (text.trim() === "") setFiltered(products);
-    else {
-      const s = text.toLowerCase();
-      setFiltered(
-        products.filter(
-          (p) =>
-            p.name.toLowerCase().includes(s) || p.code.toLowerCase().includes(s)
-        )
-      );
-    }
+    setFiltered(applyFilters(products, text));
   };
+
+  React.useEffect(() => {
+    if (!search.trim()) {
+      setFiltered(products);
+      return;
+    }
+    setFiltered(applyFilters(products, search));
+  }, [products, search, applyFilters]);
 
   const getAxiosError = (err: any) =>
     err?.response?.data?.detail ||
@@ -217,40 +286,43 @@ export default function ScanScreen() {
       await api.post(ENDPOINTS.CONFIRM_QUADRATURE(userPatente));
       setConfirmado(true);
 
-      let adminPhone: string | null = null;
+      let phone: string | null = null;
       try {
         const { data } = await api.get(ENDPOINTS.GET_ADMIN_PHONE);
-        adminPhone = data?.phone || null;
+        phone = data?.phone || null;
       } catch (e) {
         console.warn("No se pudo obtener el número del administrador:", e);
       }
 
-      if (adminPhone) {
-        const to = normalizePhone(adminPhone);
+      if (phone) {
+        const to = normalizePhone(phone);
         try {
           const { data } = await api.post(ENDPOINTS.SEND_WHATSAPP, {
             to,
             patente: userPatente,
             usuario,
           });
-          if (data?.sid) console.log("Twilio message SID:", data.sid);
+          if (data?.sid) console.log("Twilio SID:", data.sid);
         } catch (err: any) {
           const why = getAxiosError(err);
-          Alert.alert(
+          showFeedback(
+            "warning",
             "Cuadratura confirmada",
             `Se confirmó la cuadratura, pero falló el envío de WhatsApp.\n\nMotivo: ${why}`
           );
           return;
         }
       } else {
-        Alert.alert(
+        showFeedback(
+          "warning",
           "Cuadratura confirmada",
           "No se encontró número de teléfono del administrador para enviar mensaje."
         );
         return;
       }
 
-      Alert.alert(
+      showFeedback(
+        "success",
         "¡Cuadratura confirmada!",
         "Todos los productos están verificados y se ha enviado el mensaje de confirmación."
       );
@@ -273,7 +345,89 @@ export default function ScanScreen() {
       ) {
         mensaje = detail;
       }
-      Alert.alert("No puedes confirmar aún", mensaje);
+      showFeedback("warning", "No puedes confirmar aún", mensaje);
+    }
+  };
+
+  // --- helpers selección múltiple (para el manual) ---
+  const toggleId = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const selectAll = () =>
+    setSelectedIds(new Set(selectResults.map((p) => p.id)));
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const verifySelectedManual = async () => {
+    if (!selectedIds.size) {
+      showFeedback(
+        "warning",
+        "Nada seleccionado",
+        "Selecciona al menos un producto."
+      );
+      return;
+    }
+    setSelectLoading(true);
+    try {
+      const userData = JSON.parse(
+        (await AsyncStorage.getItem("userData")) || "{}"
+      );
+      const userId = userData.user_id;
+
+      let ok = 0;
+      let fails: { code: string; reason: string }[] = [];
+
+      for (const p of selectResults) {
+        if (!selectedIds.has(p.id)) continue;
+        try {
+          // Reutilizamos verifyProduct pero sin abrir/cerrar modales a cada éxito:
+          const patchPayload = {
+            status_p: "Verificado",
+            verified_by_p: userId,
+            verified_at_p: new Date().toISOString(),
+          };
+          await api.patch(ENDPOINTS.PATCH_PRODUCT(p.id), patchPayload);
+          await api.post(ENDPOINTS.SCAN_PRODUCT(p.id), {});
+          ok++;
+        } catch (e: any) {
+          fails.push({
+            code: p.code,
+            reason:
+              e?.response?.data?.detail || e?.message || "Error desconocido",
+          });
+        }
+      }
+
+      setSelectModal(false);
+      setSelectedIds(new Set());
+      setManualModal(false);
+      setManualCode("");
+
+      if (fails.length === 0) {
+        showFeedback(
+          "success",
+          "¡Productos verificados!",
+          `Se verificaron ${ok} producto(s) correctamente.`
+        );
+      } else {
+        const list = fails
+          .slice(0, 5)
+          .map((f) => `• ${f.code}: ${f.reason}`)
+          .join("\n");
+        const extra = fails.length > 5 ? `\n… y ${fails.length - 5} más.` : "";
+        showFeedback(
+          ok > 0 ? "warning" : "error",
+          ok > 0 ? "Verificación parcial" : "No se pudieron verificar",
+          `Éxitos: ${ok}\nFallos: ${fails.length}\n${list}${extra}`
+        );
+      }
+
+      await fetchProductos();
+    } finally {
+      setSelectLoading(false);
     }
   };
 
@@ -283,31 +437,48 @@ export default function ScanScreen() {
     try {
       const code = manualCode.trim();
       if (!code) {
-        Alert.alert("Código vacío", "Ingresa el código del producto");
+        showFeedback(
+          "warning",
+          "Código vacío",
+          "Ingresa el código del producto"
+        );
         return;
       }
+
+      const userDataString = await AsyncStorage.getItem("userData");
+      if (!userDataString) throw new Error("No hay usuario autenticado");
+      const userData = JSON.parse(userDataString);
 
       const { data: batchId } = await api.get(ENDPOINTS.LAST_BATCH);
       const res = await api.get(ENDPOINTS.GET_PRODUCTS_FILTERED(code, batchId));
       const resultados: Product[] = res.data ?? [];
 
       if (resultados.length === 0) {
-        Alert.alert(
+        showFeedback(
+          "error",
           "Producto no encontrado",
           `No existe producto con código: ${code}`
         );
         return;
       }
 
-      // 🔎 dejar SOLO pendientes (no verificados)
-      const pendientes = resultados.filter(
+      // pendientes
+      let pendientes = resultados.filter(
         (p) => (p.status_p || "").toLowerCase() !== "verificado"
       );
 
+      // si es pioneta, que coincida la patente del usuario
+      if (userData.role === "pioneta") {
+        pendientes = pendientes.filter(
+          (p) => p.patent && userData.patent && p.patent === userData.patent
+        );
+      }
+
       if (pendientes.length === 0) {
-        Alert.alert(
+        showFeedback(
+          "warning",
           "Ya verificado",
-          "El/los producto(s) encontrado(s) ya fueron verificados."
+          "El/los producto(s) ya fueron verificados o no pertenecen a tu patente."
         );
         return;
       }
@@ -317,10 +488,13 @@ export default function ScanScreen() {
         return;
       }
 
+      // selección múltiple
       setSelectResults(pendientes);
+      setSelectedIds(new Set());
       setSelectModal(true);
     } catch (err: any) {
-      Alert.alert(
+      showFeedback(
+        "error",
         "Error",
         err?.response?.data?.detail || "No se pudo verificar el producto"
       );
@@ -337,7 +511,11 @@ export default function ScanScreen() {
       const { data } = await api.get(ENDPOINTS.GET_PRODUCT_DETAIL(productId));
       setProductDetail(data);
     } catch (error) {
-      Alert.alert("Error", "No se pudo cargar el detalle del producto");
+      showFeedback(
+        "error",
+        "Error",
+        "No se pudo cargar el detalle del producto"
+      );
       setProductDetail(null);
     } finally {
       setLoadingDetail(false);
@@ -408,7 +586,7 @@ export default function ScanScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ---- MODAL MANUAL (contenedor reutilizable) ---- */}
+        {/* ---- MODAL MANUAL ---- */}
         <AppModalCard
           visible={manualModal}
           onRequestClose={() => setManualModal(false)}
@@ -468,7 +646,8 @@ export default function ScanScreen() {
               >
                 Detalle del Producto
               </Text>
-              <Text>Código: {productDetail.code}</Text>
+              <Text>Código 1: {productDetail.code}</Text>
+              <Text>Código 2: {productDetail.code_lpn}</Text>
               <Text>Nombre: {productDetail.name}</Text>
               <Text>Dirección: {productDetail.address}</Text>
               <Text>Cliente: {productDetail.name_client}</Text>
@@ -489,52 +668,87 @@ export default function ScanScreen() {
           )}
         </AppModalCard>
 
-        {/* ---- MODAL SELECCIÓN ---- */}
+        {/* ---- MODAL SELECCIÓN (ahora múltiple) ---- */}
         <AppModalCard
           visible={selectModal}
           onRequestClose={() => setSelectModal(false)}
         >
           <Text style={{ fontWeight: "bold", fontSize: 18, marginBottom: 12 }}>
-            Seleccionar producto a escanear
+            Selecciona los productos
           </Text>
+
           {selectLoading ? (
             <ActivityIndicator size="large" color="#2196F3" />
           ) : (
-            <FlatList
-              data={selectResults}
-              keyExtractor={(p) => p.id.toString()}
-              ItemSeparatorComponent={() => <View style={styles.separator} />}
-              renderItem={({ item }) => (
+            <>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  marginBottom: 8,
+                }}
+              >
+                <TouchableOpacity onPress={selectAll} style={styles.pickBtn}>
+                  <Text style={styles.pickBtnText}>Seleccionar todos</Text>
+                </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.selectItem}
-                  onPress={async () => {
-                    try {
-                      setSelectLoading(true);
-                      await verifyProduct(item);
-                      setSelectModal(false);
-                    } finally {
-                      setSelectLoading(false);
-                    }
-                  }}
+                  onPress={clearSelection}
+                  style={[styles.pickBtn, { backgroundColor: "#eee" }]}
                 >
-                  <Text style={{ fontWeight: "bold" }}>
-                    Folio: {item.code} — {item.name}
-                  </Text>
-                  <Text>Patente: {item.patent || "—"}</Text>
-                  <Text>
-                    Estado:{" "}
-                    <Text
-                      style={{
-                        color: item.status_p === "Verificado" ? "green" : "red",
-                      }}
-                    >
-                      {item.status_p}
-                    </Text>
+                  <Text style={[styles.pickBtnText, { color: "#333" }]}>
+                    Limpiar
                   </Text>
                 </TouchableOpacity>
-              )}
-            />
+              </View>
+
+              <FlatList
+                data={selectResults}
+                keyExtractor={(p) => p.id.toString()}
+                ItemSeparatorComponent={() => <View style={styles.separator} />}
+                renderItem={({ item }) => {
+                  const checked = selectedIds.has(item.id);
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.selectItem,
+                        { flexDirection: "row", alignItems: "center", gap: 8 },
+                      ]}
+                      onPress={() => toggleId(item.id)}
+                    >
+                      <MaterialIcons
+                        name={checked ? "check-box" : "check-box-outline-blank"}
+                        size={22}
+                        color={checked ? "#2196F3" : "#9CA3AF"}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontWeight: "bold" }}>
+                          Folio: {item.code} — {item.name}
+                        </Text>
+                        <Text>Patente: {item.patent || "—"}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+
+              <TouchableOpacity
+                style={[
+                  styles.manualSendButton,
+                  {
+                    marginTop: 12,
+                    backgroundColor: selectedIds.size ? "#2196F3" : "#9CA3AF",
+                  },
+                ]}
+                disabled={!selectedIds.size}
+                onPress={verifySelectedManual}
+              >
+                <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                  Verificar seleccionados ({selectedIds.size})
+                </Text>
+              </TouchableOpacity>
+            </>
           )}
+
           <TouchableOpacity
             style={[
               styles.manualSendButton,
@@ -569,16 +783,16 @@ export default function ScanScreen() {
         )}
       </View>
 
-      {/* ✅ Modal de éxito genérico */}
+      {/* Modal */}
       <AppModal
-        visible={successOpen}
-        title="¡Producto verificado!"
-        message={successMsg}
-        onClose={() => setSuccessOpen(false)}
-        iconName="check-circle"
-        accentColor="#24c96b"
-        backgroundColor="#fff"
-        textColor="#1f2937"
+        visible={feedback.open}
+        title={feedback.title}
+        message={feedback.message}
+        onClose={() => setFeedback((f) => ({ ...f, open: false }))}
+        iconName={feedback.iconName}
+        accentColor={feedback.accentColor}
+        backgroundColor={feedback.backgroundColor}
+        textColor={feedback.textColor}
       />
     </View>
   );
@@ -601,7 +815,6 @@ const styles = StyleSheet.create({
   },
   productName: { fontWeight: "bold", fontSize: 16 },
 
-  // menú
   menuOverlay: {
     position: "absolute",
     top: 0,
@@ -629,7 +842,6 @@ const styles = StyleSheet.create({
   menuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 10 },
   menuText: { fontSize: 16, marginLeft: 8, color: "#333" },
 
-  // actions & search
   buttonRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -703,7 +915,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 
-  // inputs/botones internos de modales
   manualInput: {
     borderWidth: 1,
     borderColor: "#bbb",
@@ -724,6 +935,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginHorizontal: 2,
   },
+
+  pickBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: "#eaf3fa",
+    borderWidth: 1,
+    borderColor: "#2196F3",
+  },
+  pickBtnText: { color: "#2196F3", fontWeight: "bold" },
 
   separator: { height: 1, backgroundColor: "#E5E7EB", marginVertical: 8 },
   selectItem: { paddingVertical: 10 },

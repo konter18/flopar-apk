@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   ActivityIndicator,
-  Alert,
   TouchableOpacity,
   TextInput,
 } from "react-native";
@@ -17,7 +16,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialIcons } from "@expo/vector-icons";
 import api from "../utils/api";
 
-// ✅ modales reutilizables
+//modales reutilizables
 import AppModal from "./components/AppModal";
 import AppModalCard from "./components/AppModalCard";
 
@@ -25,6 +24,8 @@ interface Product {
   id: number;
   name: string;
   code: string;
+  code_do?: string;
+  code_lpn?: string;
   patent: string;
   status_b: string;
 }
@@ -43,7 +44,8 @@ const ProductCard = React.memo(({ item, onPress }: ProductCardProps) => (
   <TouchableOpacity onPress={() => onPress(item.id)} activeOpacity={0.8}>
     <View style={styles.card}>
       <Text style={styles.productName}>Nombre: {item.name}</Text>
-      <Text>Código: {item.code}</Text>
+      <Text>Código 1: {item.code}</Text>
+      <Text>Código 2: {item.code_lpn}</Text>
       <Text>Patente: {item.patent}</Text>
       <Text>
         Estado:{" "}
@@ -95,9 +97,54 @@ export default function BodegaScreen() {
     setRefreshing(false);
   };
 
-  // ✅ modal de éxito (mensaje bonito en vez de Alert.alert)
-  const [successOpen, setSuccessOpen] = useState(false);
-  const [successMsg, setSuccessMsg] = useState("");
+  type FeedbackType = "success" | "warning" | "error" | "info";
+  type AppModalIconName =
+    | "check-circle"
+    | "alert-circle"
+    | "close-circle"
+    | "information";
+
+  const [feedback, setFeedback] = useState<{
+    open: boolean;
+    type: FeedbackType;
+    title: string;
+    message: string;
+    iconName: AppModalIconName;
+    accentColor: string;
+    backgroundColor: string;
+    textColor: string;
+  }>({
+    open: false,
+    type: "info",
+    title: "",
+    message: "",
+    iconName: "information",
+    accentColor: "#3B82F6",
+    backgroundColor: "#fff",
+    textColor: "#1f2937",
+  });
+
+  function showFeedback(type: FeedbackType, title: string, message: string) {
+    const map: Record<
+      FeedbackType,
+      { iconName: AppModalIconName; accentColor: string }
+    > = {
+      success: { iconName: "check-circle", accentColor: "#22C55E" },
+      warning: { iconName: "alert-circle", accentColor: "#EF4444" },
+      error: { iconName: "close-circle", accentColor: "#EF4444" },
+      info: { iconName: "information", accentColor: "#3B82F6" },
+    };
+
+    setFeedback((f) => ({
+      ...f,
+      open: true,
+      type,
+      title,
+      message,
+      iconName: map[type].iconName,
+      accentColor: map[type].accentColor,
+    }));
+  }
 
   const handleLogout = async () => {
     setShowMenu(false);
@@ -107,7 +154,11 @@ export default function BodegaScreen() {
 
   async function verifyProductBodega(product: Product) {
     if ((product.status_b || "").toLowerCase() === "verificado") {
-      Alert.alert("Producto ya verificado", `Folio: ${product.code}`);
+      showFeedback(
+        "warning",
+        "Producto ya verificado",
+        `Folio: ${product.code}`
+      );
       return;
     }
 
@@ -125,8 +176,11 @@ export default function BodegaScreen() {
     await api.patch(ENDPOINTS.PATCH_PRODUCT(product.id), patchPayload);
 
     // modal de éxito
-    setSuccessMsg(`Producto: ${product.name}\nCódigo: ${product.code}`);
-    setSuccessOpen(true);
+    showFeedback(
+      "success",
+      "¡Producto verificado!",
+      `Producto: ${product.name}\nCódigo1: ${product.code}\nCódigo2: ${product.code_lpn}`
+    );
 
     setManualModal(false);
     setManualCode("");
@@ -145,7 +199,7 @@ export default function BodegaScreen() {
       setFiltered(productos);
     } catch (error) {
       console.error(error);
-      Alert.alert("Error", "No se pudieron cargar los productos.");
+      showFeedback("error", "Error", "No se pudieron cargar los productos.");
     } finally {
       setLoading(false);
     }
@@ -161,16 +215,25 @@ export default function BodegaScreen() {
   const applyFilters = useCallback((base: Product[], text: string) => {
     const s = text.toLowerCase().trim();
     if (!s) return base;
+
+    const norm = (v?: string) => (v || "").toLowerCase();
+
     return base.filter(
       (p) =>
-        p.name.toLowerCase().includes(s) || p.code.toLowerCase().includes(s)
+        norm(p.name).includes(s) ||
+        norm(p.code).includes(s) ||
+        norm(p.code_lpn).includes(s) ||
+        norm(p.code_do).includes(s) ||
+        norm(p.patent).includes(s)
     );
   }, []);
 
   const handleSearch = (text: string) => {
     setSearch(text);
     const base = showOnlyPending
-      ? products.filter((p) => p.status_b !== "Verificado")
+      ? products.filter(
+          (p) => (p.status_b || "").toLowerCase() !== "verificado"
+        )
       : products;
     setFiltered(applyFilters(base, text));
   };
@@ -188,7 +251,11 @@ export default function BodegaScreen() {
     try {
       const code = manualCode.trim();
       if (!code) {
-        Alert.alert("Código vacío", "Ingresa el código del producto");
+        showFeedback(
+          "warning",
+          "Código vacío",
+          "Ingresa el código del producto"
+        );
         return;
       }
 
@@ -199,21 +266,23 @@ export default function BodegaScreen() {
       const resultados = res.data ?? [];
 
       if (resultados.length === 0) {
-        Alert.alert(
+        showFeedback(
+          "error",
           "Producto no encontrado",
           `No existe producto con código: ${code}`
         );
         return;
       }
-      
+
       const pendientes = resultados.filter(
         (p) => (p.status_b || "").toLowerCase() !== "verificado"
       );
 
       if (pendientes.length === 0) {
-        Alert.alert(
-          "Ya verificado",
-          "El/los producto(s) encontrado(s) ya fueron verificados."
+        showFeedback(
+          "warning",
+          "Ya fue escaneado",
+          "El código del producto encontrado ya fue escaneado."
         );
         return;
       }
@@ -227,7 +296,8 @@ export default function BodegaScreen() {
       setManualModal(false);
       setSelectModal(true);
     } catch (err: any) {
-      Alert.alert(
+      showFeedback(
+        "error",
         "Error",
         err?.response?.data?.detail || "No se pudo verificar el producto"
       );
@@ -246,7 +316,11 @@ export default function BodegaScreen() {
       );
       setProductDetail(data);
     } catch {
-      Alert.alert("Error", "No se pudo cargar el detalle del producto");
+      showFeedback(
+        "error",
+        "Error",
+        "No se pudo cargar el detalle del producto"
+      );
       setProductDetail(null);
     } finally {
       setLoadingDetail(false);
@@ -373,7 +447,8 @@ export default function BodegaScreen() {
               >
                 Detalle del Producto
               </Text>
-              <Text>Código: {productDetail.code}</Text>
+              <Text>Código 1: {productDetail.code}</Text>
+              <Text>Código 2: {productDetail.code_lpn}</Text>
               <Text>Nombre: {productDetail.name}</Text>
               <Text>Dirección: {productDetail.address}</Text>
               <Text>Cliente: {productDetail.name_client}</Text>
@@ -476,16 +551,16 @@ export default function BodegaScreen() {
         )}
       </View>
 
-      {/* ✅ modal de éxito */}
+      {/* ✅ Modal de feedback unificado */}
       <AppModal
-        visible={successOpen}
-        title="¡Producto verificado!"
-        message={successMsg}
-        onClose={() => setSuccessOpen(false)}
-        iconName="check-circle"
-        accentColor="#24c96b"
-        backgroundColor="#fff"
-        textColor="#1f2937"
+        visible={feedback.open}
+        title={feedback.title}
+        message={feedback.message}
+        onClose={() => setFeedback((f) => ({ ...f, open: false }))}
+        iconName={feedback.iconName}
+        accentColor={feedback.accentColor}
+        backgroundColor={feedback.backgroundColor}
+        textColor={feedback.textColor}
       />
     </View>
   );
