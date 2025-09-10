@@ -24,7 +24,8 @@ interface Product {
   id: number;
   name: string;
   code: string;
-  code_lpn: string;
+  code_do?: string;
+  code_lpn?: string;
   patent: string;
   status_b: string;
 }
@@ -214,16 +215,25 @@ export default function BodegaScreen() {
   const applyFilters = useCallback((base: Product[], text: string) => {
     const s = text.toLowerCase().trim();
     if (!s) return base;
+
+    const norm = (v?: string) => (v || "").toLowerCase();
+
     return base.filter(
       (p) =>
-        p.name.toLowerCase().includes(s) || p.code.toLowerCase().includes(s)
+        norm(p.name).includes(s) ||
+        norm(p.code).includes(s) ||
+        norm(p.code_lpn).includes(s) ||
+        norm(p.code_do).includes(s) ||
+        norm(p.patent).includes(s)
     );
   }, []);
 
   const handleSearch = (text: string) => {
     setSearch(text);
     const base = showOnlyPending
-      ? products.filter((p) => p.status_b !== "Verificado")
+      ? products.filter(
+          (p) => (p.status_b || "").toLowerCase() !== "verificado"
+        )
       : products;
     setFiltered(applyFilters(base, text));
   };
